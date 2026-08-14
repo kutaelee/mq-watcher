@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildSnapshotDiff, closeSession, findReusableSession, MAX_STORE_SESSIONS, restoreSessions, sessionId } from "../app/lib/workbench.mjs";
+import { addCaseNote, addCasePin, buildInvestigativeLeads, buildSnapshotDiff, closeSession, createIncidentCase, findReusableSession, MAX_STORE_SESSIONS, restoreSessions, sessionId } from "../app/lib/workbench.mjs";
 
 test("session IDs and duplicate lookup are deterministic", () => {
   assert.equal(sessionId("3:store:1:abc"), sessionId("3:store:1:abc"));
@@ -45,4 +45,23 @@ test("snapshot diff is deterministic and reports observations without runtime-st
   assert.ok(first.some((row) => row.status === "not-observed-left" && row.key.includes("PRICES")));
   assert.ok(first.some((row) => row.status === "changed" && row.delta === 40));
   assert.ok(first.every((row) => !row.status.includes("removed")));
+});
+
+test("incident cases keep explicit user notes and de-duplicate pinned evidence", () => {
+  const created = createIncidentCase("2026-01-01T00:00:00.000Z", "case-1");
+  const noted = addCaseNote(created, "Check the reconnect sequence", "2026-01-01T00:01:00.000Z", "note-1");
+  const pin = { id: "evidence-1", storeSignature: "sig", storeName: "store-a", kind: "message", label: "ORDERS", file: "db-1.log", offset: 12, confidence: "Parsed" };
+  const pinned = addCasePin(noted, pin, "2026-01-01T00:02:00.000Z");
+  assert.equal(pinned.notes[0].text, "Check the reconnect sequence");
+  assert.equal(addCasePin(pinned, pin).pins.length, 1);
+});
+
+test("investigative leads expose their thresholds without declaring a root cause", () => {
+  const result = {
+    totals: { advisoryRecords: 12 },
+    structured: { records: Array.from({ length: 10 }, (_, index) => ({ file: index < 7 ? "db-1.log" : "db-2.log", status: index < 5 ? "Partial" : "Parsed" })) },
+  };
+  const leads = buildInvestigativeLeads(result);
+  assert.deepEqual(leads.map((item) => item.code), ["advisory-volume", "unresolved-records", "journal-concentration"]);
+  assert.ok(leads.every((item) => Number.isFinite(item.threshold)));
 });

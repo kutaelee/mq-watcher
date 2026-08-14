@@ -26,6 +26,7 @@ import {
   MessageSquareText,
   Moon,
   Network,
+  NotebookPen,
   OctagonX,
   PanelRightClose,
   PanelRightOpen,
@@ -50,6 +51,7 @@ import { I18nProvider, useI18n, type Locale } from "@/app/lib/i18n";
 import { readScanCache, readWorkbenchState, writeScanCache, writeWorkbenchState } from "@/app/lib/scan-cache";
 import { closeSession, findReusableSession, MAX_STORE_SESSIONS, restoreSessions, sessionId } from "@/app/lib/workbench.mjs";
 import type {
+  CasePin,
   Confidence,
   DestinationRecord,
   EvidenceLink,
@@ -78,8 +80,9 @@ import {
   Tooltip,
 } from "./ui";
 import { SnapshotCompare } from "./compare/SnapshotCompare";
+import { IncidentCase } from "./case/IncidentCase";
 
-type ViewId = "overview" | "compare" | "destinations" | "subscriptions" | "messages" | "evidence" | "files";
+type ViewId = "overview" | "compare" | "case" | "destinations" | "subscriptions" | "messages" | "evidence" | "files";
 
 type Selected =
   | { type: "destination"; value: DestinationRecord }
@@ -136,6 +139,7 @@ const SCANNER_VERSION = "3";
 const NAVIGATION: Array<{ id: ViewId; icon: typeof Gauge }> = [
   { id: "overview", icon: Gauge },
   { id: "compare", icon: GitCompareArrows },
+  { id: "case", icon: NotebookPen },
   { id: "destinations", icon: Boxes },
   { id: "subscriptions", icon: Network },
   { id: "messages", icon: MessageSquareText },
@@ -245,6 +249,18 @@ function displayStore(result: ScanResult, t: Translator) {
 
 function localeCode(locale: Locale) {
   return locale === "ko" ? "ko-KR" : "en-US";
+}
+
+function makePinCandidate(selected: Selected, result: ScanResult | null): Omit<CasePin, "pinnedAt"> | null {
+  if (!selected || !result) return null;
+  const base = { storeSignature: result.signature, storeName: result.directoryName };
+  if (selected.type === "destination") return { ...base, id: selected.value.id, kind: selected.type, label: selected.value.name, file: selected.value.source, offset: null, confidence: selected.value.confidence };
+  if (selected.type === "subscription") return { ...base, id: selected.value.id, kind: selected.type, label: selected.value.rawId, file: selected.value.relatedStore, offset: null, confidence: selected.value.confidence };
+  if (selected.type === "message") return { ...base, id: selected.value.id, kind: selected.type, label: `${selected.value.destination} @ ${formatOffset(selected.value.offset)}`, file: selected.value.journal, offset: selected.value.offset, confidence: selected.value.confidence };
+  if (selected.type === "correlation") return { ...base, id: selected.value.id, kind: selected.type, label: selected.value.primaryId, file: selected.value.journal, offset: selected.value.offset, confidence: selected.value.confidence };
+  if (selected.type === "record") return { ...base, id: `${selected.value.file}:${selected.value.location.offset}`, kind: selected.type, label: selected.value.command, file: selected.value.file, offset: selected.value.location.offset, confidence: selected.value.confidence };
+  if (selected.type === "raw") return { ...base, id: selected.value.id, kind: selected.type, label: selected.value.value, file: selected.value.file, offset: selected.value.offset, confidence: selected.value.confidence };
+  return { ...base, id: selected.value.path, kind: selected.type, label: selected.value.path, file: selected.value.path, offset: null, confidence: selected.value.confidence };
 }
 
 async function collectDirectoryFiles(handle: FileSystemDirectoryHandle) {
@@ -479,7 +495,7 @@ function ExplorerApp() {
     if (view === "overview") setSelected(null);
   };
 
-  const searchResults = useMemo(() => {
+  const searchResults = (() => {
     const query = searchQuery.trim().toLowerCase();
     if (!result || !query) return { destinations: [], subscriptions: [], messages: [], strings: [] };
     return {
@@ -488,7 +504,7 @@ function ExplorerApp() {
       messages: result.messages.filter((item) => `${item.destination} ${item.relatedId} ${item.journal}`.toLowerCase().includes(query)).slice(0, 8),
       strings: result.strings.filter((item) => `${item.value} ${item.file}`.toLowerCase().includes(query)).slice(0, 12),
     };
-  }, [result, searchQuery]);
+  })();
 
   const searchCount = Object.values(searchResults).reduce((sum, items) => sum + items.length, 0);
   const activeNavLabel = t(`nav.${activeView}`);
@@ -605,6 +621,7 @@ function ExplorerApp() {
             <>
               {activeView === "overview" ? <Overview result={result} help={help} onHelp={setContextHelp} onNavigate={navigate} onSelect={selectItem} /> : null}
               {activeView === "compare" ? <SnapshotCompare sessions={sessions} /> : null}
+              {activeView === "case" ? <IncidentCase result={result} pinCandidate={makePinCandidate(selected, result)} /> : null}
               {activeView === "destinations" ? <DestinationsView key={`${result.signature}:destinations`} stateKey={`${result.signature}:destinations`} result={result} help={help} onSelect={selectItem} onHelp={setContextHelp} /> : null}
               {activeView === "subscriptions" ? <SubscriptionsView key={`${result.signature}:subscriptions`} stateKey={`${result.signature}:subscriptions`} result={result} help={help} onSelect={selectItem} onHelp={setContextHelp} /> : null}
               {activeView === "messages" ? <MessagesView key={`${result.signature}:messages`} stateKey={`${result.signature}:messages`} result={result} onSelect={selectItem} /> : null}

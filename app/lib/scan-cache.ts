@@ -1,9 +1,10 @@
-import type { ScanResult } from "./types";
+import type { IncidentCase, ScanResult } from "./types";
 
 const DB_NAME = "mq-watcher";
 const STORE_NAME = "scan-results";
 const WORKBENCH_STORE = "workbench-state";
-const DB_VERSION = 2;
+const CASE_STORE = "incident-cases";
+const DB_VERSION = 3;
 
 export type PersistedWorkbenchState = {
   id: "current";
@@ -30,9 +31,35 @@ function openDatabase(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(WORKBENCH_STORE)) {
         db.createObjectStore(WORKBENCH_STORE, { keyPath: "id" });
       }
+      if (!db.objectStoreNames.contains(CASE_STORE)) {
+        db.createObjectStore(CASE_STORE, { keyPath: "id" });
+      }
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
+  });
+}
+
+export async function readIncidentCases(): Promise<IncidentCase[]> {
+  if (typeof indexedDB === "undefined") return [];
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(CASE_STORE, "readonly");
+    const request = tx.objectStore(CASE_STORE).getAll();
+    request.onsuccess = () => resolve((request.result as IncidentCase[]).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+    request.onerror = () => reject(request.error);
+    tx.oncomplete = () => db.close();
+  });
+}
+
+export async function writeIncidentCase(value: IncidentCase): Promise<void> {
+  if (typeof indexedDB === "undefined") return;
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(CASE_STORE, "readwrite");
+    tx.objectStore(CASE_STORE).put(value);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => reject(tx.error);
   });
 }
 

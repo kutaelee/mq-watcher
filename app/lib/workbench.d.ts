@@ -6,3 +6,8 @@ export function restoreSessions<T>(state: unknown): T[];
 export type SnapshotDiffRow = { id: string; category: string; key: string; leftValue: number | null; rightValue: number | null; delta: number | null; status: "not-observed-left" | "not-observed-right" | "changed" };
 export function collectSnapshotFacts(result: unknown): Map<string, number>;
 export function buildSnapshotDiff(left: unknown, right: unknown): SnapshotDiffRow[];
+export const LEAD_THRESHOLDS: Readonly<{ advisoryObservations: number; unknownRecords: number; journalConcentrationPercent: number; journalConcentrationMinimum: number }>;
+export function createIncidentCase(now?: string, id?: string): import("./types").IncidentCase;
+export function addCasePin(incident: import("./types").IncidentCase, pin: Omit<import("./types").CasePin, "pinnedAt">, now?: string): import("./types").IncidentCase;
+export function addCaseNote(incident: import("./types").IncidentCase, text: string, now?: string, id?: string): import("./types").IncidentCase;
+export function buildInvestigativeLeads(result: unknown, thresholds?: typeof LEAD_THRESHOLDS): Array<{ code: string; observed: number; threshold: number; detail?: string }>;

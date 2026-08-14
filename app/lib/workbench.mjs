@@ -84,3 +84,37 @@ export function buildSnapshotDiff(left, right) {
     }];
   });
 }
+
+export const LEAD_THRESHOLDS = Object.freeze({ advisoryObservations: 10, unknownRecords: 5, journalConcentrationPercent: 60, journalConcentrationMinimum: 10 });
+
+export function createIncidentCase(now = new Date().toISOString(), id = `case-${Date.now().toString(36)}`) {
+  return { id, title: "", hypothesis: "", notes: [], pins: [], createdAt: now, updatedAt: now };
+}
+
+export function addCasePin(incident, pin, now = new Date().toISOString()) {
+  if (incident.pins.some((item) => item.id === pin.id && item.storeSignature === pin.storeSignature)) return incident;
+  return { ...incident, pins: [...incident.pins, { ...pin, pinnedAt: now }], updatedAt: now };
+}
+
+export function addCaseNote(incident, text, now = new Date().toISOString(), id = `note-${Date.now().toString(36)}`) {
+  const trimmed = String(text).trim();
+  if (!trimmed) return incident;
+  return { ...incident, notes: [...incident.notes, { id, text: trimmed, createdAt: now }], updatedAt: now };
+}
+
+export function buildInvestigativeLeads(result, thresholds = LEAD_THRESHOLDS) {
+  const leads = [];
+  const advisory = Number(result?.totals?.advisoryRecords) || 0;
+  if (advisory >= thresholds.advisoryObservations) leads.push({ code: "advisory-volume", observed: advisory, threshold: thresholds.advisoryObservations });
+  const unknown = (result?.structured?.records ?? []).filter((record) => record.status === "Unknown" || record.status === "Partial" || record.status === "Unsupported").length;
+  if (unknown >= thresholds.unknownRecords) leads.push({ code: "unresolved-records", observed: unknown, threshold: thresholds.unknownRecords });
+  const journalCounts = new Map();
+  for (const record of result?.structured?.records ?? []) increment(journalCounts, record.file);
+  const total = [...journalCounts.values()].reduce((sum, count) => sum + count, 0);
+  const top = [...journalCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
+  const percent = top && total ? Math.round((top[1] / total) * 100) : 0;
+  if (top && total >= thresholds.journalConcentrationMinimum && percent >= thresholds.journalConcentrationPercent) {
+    leads.push({ code: "journal-concentration", observed: percent, threshold: thresholds.journalConcentrationPercent, detail: top[0] });
+  }
+  return leads;
+}

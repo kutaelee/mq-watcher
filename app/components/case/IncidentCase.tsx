@@ -1,0 +1,57 @@
+"use client";
+
+import { BookOpen, Lightbulb, MapPin, NotebookPen, Plus } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useI18n } from "@/app/lib/i18n";
+import { readIncidentCases, writeIncidentCase } from "@/app/lib/scan-cache";
+import type { CasePin, IncidentCase as IncidentCaseValue, ScanResult } from "@/app/lib/types";
+import { addCaseNote, addCasePin, buildInvestigativeLeads, createIncidentCase, LEAD_THRESHOLDS } from "@/app/lib/workbench.mjs";
+import { Badge, Button, Card } from "../ui";
+
+type PinCandidate = Omit<CasePin, "pinnedAt">;
+
+export function IncidentCase({ result, pinCandidate }: { result: ScanResult; pinCandidate: PinCandidate | null }) {
+  const { t } = useI18n();
+  const [cases, setCases] = useState<IncidentCaseValue[]>([]);
+  const [activeId, setActiveId] = useState("");
+  const [note, setNote] = useState("");
+
+  useEffect(() => {
+    readIncidentCases().then((values) => {
+      setCases(values);
+      setActiveId(values[0]?.id ?? "");
+    }).catch(() => undefined);
+  }, []);
+
+  const active = cases.find((item) => item.id === activeId) ?? null;
+  const leads = buildInvestigativeLeads(result);
+  const persist = (next: IncidentCaseValue) => {
+    setCases((current) => [next, ...current.filter((item) => item.id !== next.id)]);
+    setActiveId(next.id);
+    writeIncidentCase(next).catch(() => undefined);
+  };
+  const createCase = () => persist(createIncidentCase());
+  const update = (changes: Partial<IncidentCaseValue>) => {
+    if (!active) return;
+    persist({ ...active, ...changes, updatedAt: new Date().toISOString() });
+  };
+
+  return <div className="case-layout">
+    <Card className="case-list">
+      <div className="case-list-head"><div><span>{t("case.saved")}</span><strong>{t("case.title")}</strong></div><Button onClick={createCase}><Plus size={14} />{t("case.new")}</Button></div>
+      {cases.length ? cases.map((item) => <button key={item.id} className={item.id === activeId ? "active" : ""} onClick={() => setActiveId(item.id)}><NotebookPen size={15} /><span><strong>{item.title || t("case.untitled")}</strong><small>{t("case.pinCount", { count: item.pins.length })} · {t("case.noteCount", { count: item.notes.length })}</small></span></button>) : <div className="case-list-empty"><BookOpen size={23} /><p>{t("case.empty")}</p><Button onClick={createCase}>{t("case.new")}</Button></div>}
+    </Card>
+    <div className="case-main">
+      {!active ? <Card className="case-welcome"><NotebookPen size={28} /><h2>{t("case.welcome.title")}</h2><p>{t("case.welcome.body")}</p></Card> : <>
+        <Card className="case-editor">
+          <label><span>{t("case.field.title")}</span><input value={active.title} onChange={(event) => update({ title: event.target.value })} placeholder={t("case.field.titlePlaceholder")} /></label>
+          <label><span>{t("case.field.hypothesis")}</span><textarea value={active.hypothesis} onChange={(event) => update({ hypothesis: event.target.value })} placeholder={t("case.field.hypothesisPlaceholder")} /></label>
+          <div className="case-pin-action"><div><MapPin size={16} /><span><strong>{t("case.pinSelected")}</strong><small>{pinCandidate ? pinCandidate.label : t("case.noSelection")}</small></span></div><Button variant="secondary" disabled={!pinCandidate} onClick={() => pinCandidate && persist(addCasePin(active, pinCandidate))}>{t("case.pin")}</Button></div>
+        </Card>
+        <Card className="case-section"><div className="section-head"><div><span className="section-kicker">{t("case.evidence")}</span><h2>{t("case.pins")}</h2></div><Badge tone="blue">{active.pins.length}</Badge></div>{active.pins.length ? <div className="case-pins">{active.pins.map((pin) => <div key={`${pin.storeSignature}:${pin.id}`}><MapPin size={14} /><div><strong>{pin.label}</strong><small>{pin.storeName} · {pin.file || t("type.unknown")}{pin.offset === null ? "" : ` @ 0x${pin.offset.toString(16)}`}</small></div><Badge tone="neutral">{t(`confidence.${pin.confidence}`)}</Badge></div>)}</div> : <p className="case-muted">{t("case.noPins")}</p>}</Card>
+        <Card className="case-section"><div className="section-head"><div><span className="section-kicker">{t("case.notes")}</span><h2>{t("case.investigationNotes")}</h2></div></div><div className="case-note-entry"><textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder={t("case.notePlaceholder")} /><Button onClick={() => { const next = addCaseNote(active, note); persist(next); setNote(""); }}>{t("case.addNote")}</Button></div>{active.notes.length ? <div className="case-notes">{active.notes.map((item) => <div key={item.id}><p>{item.text}</p><small>{new Date(item.createdAt).toLocaleString()}</small></div>)}</div> : null}</Card>
+      </>}
+      <Card className="case-section"><div className="section-head"><div><span className="section-kicker">{t("case.leads")}</span><h2>{t("case.leadsTitle")}</h2></div><Lightbulb size={18} /></div><p className="case-muted">{t("case.leadsLimit")}</p><div className="lead-thresholds"><code>{t("case.threshold.advisory", { count: LEAD_THRESHOLDS.advisoryObservations })}</code><code>{t("case.threshold.unknown", { count: LEAD_THRESHOLDS.unknownRecords })}</code><code>{t("case.threshold.journal", { percent: LEAD_THRESHOLDS.journalConcentrationPercent, count: LEAD_THRESHOLDS.journalConcentrationMinimum })}</code></div>{leads.length ? <div className="lead-list">{leads.map((lead) => <div key={lead.code}><Lightbulb size={14} /><span><strong>{t(`case.lead.${lead.code}`)}</strong><small>{t("case.lead.observed", { observed: lead.observed, threshold: lead.threshold })}{lead.detail ? ` · ${lead.detail}` : ""}</small></span></div>)}</div> : <p className="case-muted">{t("case.noLeads")}</p>}</Card>
+    </div>
+  </div>;
+}
