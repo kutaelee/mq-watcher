@@ -118,3 +118,49 @@ export function buildInvestigativeLeads(result, thresholds = LEAD_THRESHOLDS) {
   }
   return leads;
 }
+
+function journalFileId(path) {
+  const match = /(?:^|\/)db-(\d+)\.log$/i.exec(path);
+  return match ? Number(match[1]) : null;
+}
+
+export function buildJournalRetentionIndex(result) {
+  const recordsByFile = new Map();
+  for (const record of result?.structured?.records ?? []) {
+    if (!recordsByFile.has(record.file)) recordsByFile.set(record.file, []);
+    recordsByFile.get(record.file).push(record);
+  }
+  const refsByFile = new Map();
+  for (const link of result?.correlation?.links ?? []) {
+    for (const ref of link.evidenceRefs ?? []) {
+      if (!ref.file) continue;
+      if (!refsByFile.has(ref.file)) refsByFile.set(ref.file, new Map());
+      refsByFile.get(ref.file).set(ref.id, ref);
+    }
+  }
+  const journals = (result?.files ?? []).filter((file) => file.kind === "journal" || /db-\d+\.log$/i.test(file.path));
+  const maxId = Math.max(-1, ...journals.map((file) => journalFileId(file.path) ?? -1));
+  return journals.map((file) => {
+    const records = [...(recordsByFile.get(file.path) ?? recordsByFile.get(file.name) ?? [])].sort((a, b) => a.location.offset - b.location.offset);
+    const refs = [...(refsByFile.get(file.path)?.values() ?? refsByFile.get(file.name)?.values() ?? [])].sort((a, b) => (a.offset ?? -1) - (b.offset ?? -1) || a.id.localeCompare(b.id));
+    const destinations = [...new Set(records.map((record) => record.destination?.name).filter(Boolean))].sort();
+    const commands = [...new Set(records.map((record) => record.command).filter(Boolean))].sort();
+    const fileId = journalFileId(file.path);
+    return {
+      id: file.path,
+      path: file.path,
+      fileId,
+      size: file.size,
+      modified: file.modified,
+      recordCount: records.length,
+      referenceCount: refs.length,
+      firstOffset: records[0]?.location.offset ?? null,
+      lastOffset: records.at(-1)?.location.offset ?? null,
+      destinations,
+      commands,
+      references: refs,
+      sequence: fileId !== null && fileId < maxId ? "older-file-id" : fileId === maxId ? "highest-file-id" : "unknown-order",
+      observation: refs.length ? "references-observed" : records.length ? "records-observed" : "no-structured-observation",
+    };
+  }).sort((a, b) => (a.fileId ?? Number.MAX_SAFE_INTEGER) - (b.fileId ?? Number.MAX_SAFE_INTEGER) || a.path.localeCompare(b.path));
+}

@@ -11,3 +11,5 @@ export function createIncidentCase(now?: string, id?: string): import("./types")
 export function addCasePin(incident: import("./types").IncidentCase, pin: Omit<import("./types").CasePin, "pinnedAt">, now?: string): import("./types").IncidentCase;
 export function addCaseNote(incident: import("./types").IncidentCase, text: string, now?: string, id?: string): import("./types").IncidentCase;
 export function buildInvestigativeLeads(result: unknown, thresholds?: typeof LEAD_THRESHOLDS): Array<{ code: string; observed: number; threshold: number; detail?: string }>;
+export type JournalRetentionRow = { id: string; path: string; fileId: number | null; size: number; modified: number; recordCount: number; referenceCount: number; firstOffset: number | null; lastOffset: number | null; destinations: string[]; commands: string[]; references: import("./types").EvidenceRef[]; sequence: "older-file-id" | "highest-file-id" | "unknown-order"; observation: "references-observed" | "records-observed" | "no-structured-observation" };
+export function buildJournalRetentionIndex(result: unknown): JournalRetentionRow[];

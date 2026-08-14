@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addCaseNote, addCasePin, buildInvestigativeLeads, buildSnapshotDiff, closeSession, createIncidentCase, findReusableSession, MAX_STORE_SESSIONS, restoreSessions, sessionId } from "../app/lib/workbench.mjs";
+import { addCaseNote, addCasePin, buildInvestigativeLeads, buildJournalRetentionIndex, buildSnapshotDiff, closeSession, createIncidentCase, findReusableSession, MAX_STORE_SESSIONS, restoreSessions, sessionId } from "../app/lib/workbench.mjs";
 
 test("session IDs and duplicate lookup are deterministic", () => {
   assert.equal(sessionId("3:store:1:abc"), sessionId("3:store:1:abc"));
@@ -64,4 +64,17 @@ test("investigative leads expose their thresholds without declaring a root cause
   const leads = buildInvestigativeLeads(result);
   assert.deepEqual(leads.map((item) => item.code), ["advisory-volume", "unresolved-records", "journal-concentration"]);
   assert.ok(leads.every((item) => Number.isFinite(item.threshold)));
+});
+
+test("journal reverse index preserves file order and observed references", () => {
+  const result = {
+    files: [{ path: "db-1.log", name: "db-1.log", kind: "journal", size: 100, modified: 1 }, { path: "db-2.log", name: "db-2.log", kind: "journal", size: 200, modified: 2 }],
+    structured: { records: [{ file: "db-1.log", command: "KahaAddMessageCommand", location: { offset: 24 }, destination: { name: "ORDERS" } }] },
+    correlation: { links: [{ evidenceRefs: [{ id: "ref-1", file: "db-1.log", offset: 24, label: "ID:1", confidence: "Parsed" }] }] },
+  };
+  const rows = buildJournalRetentionIndex(result);
+  assert.deepEqual(rows.map((row) => row.fileId), [1, 2]);
+  assert.equal(rows[0].referenceCount, 1);
+  assert.equal(rows[0].sequence, "older-file-id");
+  assert.equal(rows[1].observation, "no-structured-observation");
 });
