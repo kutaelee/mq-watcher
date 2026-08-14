@@ -35,6 +35,16 @@ test("CLI server binds to loopback and serves the application and worker modules
   assert.match(worker.headers.get("content-type") || "", /javascript/);
   assert.match(await worker.text(), /correlateEvidence/);
 
+  const identityWorker = await fetch(`${running.url}/store-identity.worker.js`);
+  assert.equal(identityWorker.status, 200);
+  assert.match(identityWorker.headers.get("content-type") || "", /javascript/);
+  assert.match(await identityWorker.text(), /buildContentStoreSignature/);
+
+  const identityModule = await fetch(`${running.url}/store-identity.js`);
+  assert.equal(identityModule.status, 200);
+  assert.match(identityModule.headers.get("content-type") || "", /javascript/);
+  assert.match(await identityModule.text(), /content-sha256/);
+
   const rejected = await fetch(`${running.url}/`, { method: "POST" });
   assert.equal(rejected.status, 405);
 
