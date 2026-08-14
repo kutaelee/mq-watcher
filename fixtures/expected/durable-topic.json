@@ -1,11 +1,27 @@
 {
   "storeType": "AMQ Message Store",
   "files": [
-    { "path": "journal/data-1", "size": 88, "kind": "journal", "confidence": "Observed" },
-    { "path": "kr-store/data/hash-index-queue-data_topic#3a#2f#2fPRICES", "size": 28, "kind": "index", "confidence": "Observed" }
+    {
+      "path": "journal/data-1",
+      "size": 88,
+      "kind": "journal",
+      "confidence": "Observed"
+    },
+    {
+      "path": "kr-store/data/hash-index-queue-data_topic#3a#2f#2fPRICES",
+      "size": 28,
+      "kind": "index",
+      "confidence": "Observed"
+    }
   ],
   "destinations": [
-    { "type": "Topic", "name": "PRICES", "source": "kr-store/data/hash-index-queue-data_topic#3a#2f#2fPRICES", "occurrences": 2, "confidence": "Parsed" }
+    {
+      "type": "Topic",
+      "name": "PRICES",
+      "source": "kr-store/data/hash-index-queue-data_topic#3a#2f#2fPRICES",
+      "occurrences": 2,
+      "confidence": "Parsed"
+    }
   ],
   "subscriptions": [
     {
@@ -23,7 +39,22 @@
   "messageCandidates": [],
   "messageIds": [],
   "offsets": [],
-  "totals": { "bytes": 116, "journalFiles": 1, "advisoryRecords": 0, "scannedBytes": 116 },
+  "structured": {
+    "status": "Unknown",
+    "confidence": "Unknown",
+    "records": [],
+    "warnings": [],
+    "truncated": false
+  },
+  "totals": {
+    "bytes": 116,
+    "journalFiles": 1,
+    "advisoryRecords": 0,
+    "scannedBytes": 116
+  },
   "warnings": [],
-  "truncated": { "messages": false, "strings": false }
+  "truncated": {
+    "messages": false,
+    "strings": false
+  }
 }

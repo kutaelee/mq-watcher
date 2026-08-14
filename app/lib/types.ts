@@ -64,6 +64,50 @@ export type MessageCandidate = {
   hex: string;
 };
 
+export type StructuredRecord = {
+  file: string;
+  location: { dataFileId: number; offset: number; size: number };
+  recordType: number;
+  commandType?: number;
+  command: string;
+  status: "Parsed" | "Partial" | "Unsupported" | "Unknown";
+  confidence: Confidence;
+  destination?: { type: string; name: string };
+  messageId?: string;
+  subscriptionKey?: string;
+  transactionId?: string;
+  warning?: string;
+};
+
+export type StructuredJournalResult = {
+  parser: string;
+  scope: string;
+  status: "Parsed" | "Partial" | "Unsupported" | "Unknown";
+  confidence: Confidence;
+  journals: Array<{
+    file: string;
+    fileId: number | null;
+    format: string;
+    status: "Parsed" | "Partial" | "Unsupported" | "Unknown";
+    confidence: Confidence;
+    batches: Array<{
+      offset: number;
+      payloadSize: number;
+      expectedChecksum: string;
+      actualChecksum: string;
+      checksum: "Valid" | "Invalid" | "Not present";
+      status: "Parsed" | "Partial";
+      confidence: "Parsed";
+    }>;
+    records: StructuredRecord[];
+    warnings: string[];
+    truncated: boolean;
+  }>;
+  records: StructuredRecord[];
+  warnings: string[];
+  truncated: boolean;
+};
+
 export type ScanResult = {
   signature: string;
   directoryName: string;
@@ -73,6 +117,7 @@ export type ScanResult = {
   destinations: DestinationRecord[];
   subscriptions: SubscriptionRecord[];
   messages: MessageCandidate[];
+  structured: StructuredJournalResult;
   strings: StringHit[];
   totals: {
     bytes: number;
@@ -110,4 +155,3 @@ export type FileInput = {
   relativePath: string;
   file: File;
 };
-

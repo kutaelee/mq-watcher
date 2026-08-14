@@ -1,0 +1,82 @@
+{
+  "storeType": "Unknown Store Layout",
+  "files": [
+    {
+      "path": "db-1.log",
+      "size": 151,
+      "kind": "journal",
+      "confidence": "Observed"
+    }
+  ],
+  "destinations": [],
+  "subscriptions": [],
+  "messageCandidates": [],
+  "messageIds": [],
+  "offsets": [],
+  "structured": {
+    "status": "Parsed",
+    "confidence": "Parsed",
+    "records": [
+      {
+        "file": "db-1.log",
+        "location": {
+          "dataFileId": 1,
+          "offset": 28,
+          "size": 56
+        },
+        "command": "KAHA_ADD_MESSAGE_COMMAND",
+        "status": "Parsed",
+        "confidence": "Parsed",
+        "destination": {
+          "type": "Queue",
+          "name": "ORDERS"
+        },
+        "messageId": "ID:MESSAGE:1",
+        "transactionId": "local:ID:CLIENT:1:42"
+      },
+      {
+        "file": "db-1.log",
+        "location": {
+          "dataFileId": 1,
+          "offset": 84,
+          "size": 36
+        },
+        "command": "KAHA_SUBSCRIPTION_COMMAND",
+        "status": "Parsed",
+        "confidence": "Parsed",
+        "destination": {
+          "type": "Topic",
+          "name": "PRICES"
+        },
+        "subscriptionKey": "client-a:prices"
+      },
+      {
+        "file": "db-1.log",
+        "location": {
+          "dataFileId": 1,
+          "offset": 120,
+          "size": 26
+        },
+        "command": "KAHA_COMMIT_COMMAND",
+        "status": "Parsed",
+        "confidence": "Parsed",
+        "transactionId": "local:ID:CLIENT:1:42"
+      }
+    ],
+    "warnings": [],
+    "truncated": false
+  },
+  "totals": {
+    "bytes": 151,
+    "journalFiles": 1,
+    "advisoryRecords": 0,
+    "scannedBytes": 151
+  },
+  "warnings": [
+    "Store 유형을 확정하지 않았습니다. 파일 목록과 Raw 문자열을 직접 확인하세요."
+  ],
+  "truncated": {
+    "messages": false,
+    "strings": false
+  }
+}

@@ -1,4 +1,5 @@
 /* Read-only binary scanner. It never receives writable handles. */
+import { parseKahaDbJournalFile, summarizeStructuredJournals } from "./kahadb-journal-parser.js";
 const CHUNK_SIZE = 4 * 1024 * 1024;
 const MAX_STRINGS = 6000;
 const MAX_MESSAGES = 2500;
@@ -140,6 +141,13 @@ export async function scanDirectory({ signature, directoryName, files }, emit = 
   const subscriptionMap = new Map();
   const stringHits = [];
   const messages = [];
+  const structuredJournals = [];
+
+  for (const entry of files) {
+    if (/(?:^|\/)db-\d+\.log$/i.test(entry.relativePath)) {
+      structuredJournals.push(await parseKahaDbJournalFile(entry.file, entry.relativePath));
+    }
+  }
 
   for (const entry of files) {
     const parsed = destinationFromFile(entry.relativePath);
@@ -347,6 +355,7 @@ export async function scanDirectory({ signature, directoryName, files }, emit = 
       (a, b) => b.occurrences - a.occurrences,
     ),
     messages,
+    structured: summarizeStructuredJournals(structuredJournals),
     strings: stringHits,
     totals: {
       bytes: totalBytes,

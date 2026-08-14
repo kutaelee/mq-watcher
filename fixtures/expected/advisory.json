@@ -1,12 +1,33 @@
 {
   "storeType": "Temporary Message Store",
   "files": [
-    { "path": "db-1.log", "size": 84, "kind": "journal", "confidence": "Observed" },
-    { "path": "tmpdb.data", "size": 4, "kind": "data", "confidence": "Observed" },
-    { "path": "tmpdb.redo", "size": 4, "kind": "data", "confidence": "Observed" }
+    {
+      "path": "db-1.log",
+      "size": 84,
+      "kind": "journal",
+      "confidence": "Observed"
+    },
+    {
+      "path": "tmpdb.data",
+      "size": 4,
+      "kind": "data",
+      "confidence": "Observed"
+    },
+    {
+      "path": "tmpdb.redo",
+      "size": 4,
+      "kind": "data",
+      "confidence": "Observed"
+    }
   ],
   "destinations": [
-    { "type": "Topic", "name": "ActiveMQ.Advisory.TempQueue", "source": "db-1.log", "occurrences": 1, "confidence": "Observed" }
+    {
+      "type": "Topic",
+      "name": "ActiveMQ.Advisory.TempQueue",
+      "source": "db-1.log",
+      "occurrences": 1,
+      "confidence": "Observed"
+    }
   ],
   "subscriptions": [],
   "messageCandidates": [
@@ -21,9 +42,33 @@
       "confidence": "Observed"
     }
   ],
-  "messageIds": ["ID:MESSAGE:advisory:001"],
-  "offsets": [{ "id": "db-1.log:0:advisory", "offset": 0 }],
-  "totals": { "bytes": 92, "journalFiles": 1, "advisoryRecords": 1, "scannedBytes": 92 },
+  "messageIds": [
+    "ID:MESSAGE:advisory:001"
+  ],
+  "offsets": [
+    {
+      "id": "db-1.log:0:advisory",
+      "offset": 0
+    }
+  ],
+  "structured": {
+    "status": "Unknown",
+    "confidence": "Unknown",
+    "records": [],
+    "warnings": [
+      "db-1.log: No valid KahaDB batch header at offset 0."
+    ],
+    "truncated": false
+  },
+  "totals": {
+    "bytes": 92,
+    "journalFiles": 1,
+    "advisoryRecords": 1,
+    "scannedBytes": 92
+  },
   "warnings": [],
-  "truncated": { "messages": false, "strings": false }
+  "truncated": {
+    "messages": false,
+    "strings": false
+  }
 }

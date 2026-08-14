@@ -5,6 +5,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { normalizeScanResult, scanPath } from "../scripts/fixture-lib.mjs";
 import { scanDirectory } from "../public/store-scanner.worker.js";
+import { parseKahaDbJournalFile } from "../public/kahadb-journal-parser.js";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const fixtureRoot = path.join(repositoryRoot, "fixtures", "synthetic");
@@ -17,12 +18,13 @@ const fixtureNames = [
   "corrupt",
   "truncated",
   "false-positive",
+  "kahadb-framing",
 ];
 
 class MemoryFile {
   constructor(name, value) {
     this.name = name;
-    this.bytes = Buffer.from(value, "ascii");
+    this.bytes = Buffer.isBuffer(value) ? value : Buffer.from(value, "ascii");
     this.size = this.bytes.length;
     this.lastModified = 0;
   }
@@ -83,4 +85,38 @@ test("scanner result collections remain bounded", async () => {
   assert.equal(result.messages.length, 2_500);
   assert.deepEqual(result.truncated, { messages: true, strings: true });
   assert.deepEqual(normalizeScanResult(result).truncated, result.truncated);
+});
+
+test("structured parser decodes official KahaDB batch and command envelopes", async () => {
+  const scan = await scanPath(path.join(fixtureRoot, "kahadb-framing"));
+  assert.equal(scan.result.structured.status, "Parsed");
+  assert.equal(scan.result.structured.journals[0].batches[0].checksum, "Valid");
+  assert.deepEqual(
+    scan.result.structured.records.map((record) => record.command),
+    ["KAHA_ADD_MESSAGE_COMMAND", "KAHA_SUBSCRIPTION_COMMAND", "KAHA_COMMIT_COMMAND"],
+  );
+  assert.deepEqual(scan.result.structured.records[0].destination, { type: "Queue", name: "ORDERS" });
+  assert.equal(scan.result.structured.records[0].messageId, "ID:MESSAGE:1");
+  assert.equal(scan.result.structured.records[0].transactionId, "local:ID:CLIENT:1:42");
+  assert.equal(scan.result.structured.records[1].subscriptionKey, "client-a:prices");
+});
+
+test("structured parser reports malformed and corrupt records without inventing values", async () => {
+  const malformedHeader = Buffer.concat([
+    Buffer.from([0, 0, 0, 28, 2]),
+    Buffer.from("WRITE BATCH", "ascii"),
+    Buffer.from([0, 0, 0, 8]),
+    Buffer.alloc(8),
+    Buffer.from([0, 0, 0, 50, 1, 1, 0, 0]),
+  ]);
+  const malformed = await parseKahaDbJournalFile(new MemoryFile("db-8.log", malformedHeader), "db-8.log");
+  assert.equal(malformed.status, "Partial");
+  assert.equal(malformed.records.length, 0);
+  assert.match(malformed.warnings.join(" "), /Invalid record size/);
+
+  const corrupt = Buffer.from(malformedHeader);
+  corrupt.writeBigUInt64BE(123n, 20);
+  const corruptResult = await parseKahaDbJournalFile(new MemoryFile("db-9.log", corrupt), "db-9.log");
+  assert.equal(corruptResult.status, "Partial");
+  assert.equal(corruptResult.batches[0].checksum, "Invalid");
 });

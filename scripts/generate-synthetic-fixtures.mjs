@@ -1,9 +1,11 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { scanPath } from "./fixture-lib.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const fixtureRoot = path.join(repositoryRoot, "fixtures", "synthetic");
+const expectedRoot = path.join(repositoryRoot, "fixtures", "expected");
 
 function bytes(...parts) {
   const output = [];
@@ -12,6 +14,78 @@ function bytes(...parts) {
     else output.push(Buffer.from(part));
   }
   return Buffer.concat(output);
+}
+
+function int32(value) {
+  const output = Buffer.alloc(4);
+  output.writeInt32BE(value);
+  return output;
+}
+
+function uint64(value) {
+  const output = Buffer.alloc(8);
+  output.writeBigUInt64BE(BigInt(value));
+  return output;
+}
+
+function varint(value) {
+  let remaining = BigInt(value);
+  const output = [];
+  do {
+    let byte = Number(remaining & 0x7fn);
+    remaining >>= 7n;
+    if (remaining !== 0n) byte |= 0x80;
+    output.push(byte);
+  } while (remaining !== 0n);
+  return Buffer.from(output);
+}
+
+function protoBytes(field, value) {
+  const payload = Buffer.from(value);
+  return Buffer.concat([varint((field << 3) | 2), varint(payload.length), payload]);
+}
+
+function protoVarint(field, value) {
+  return Buffer.concat([varint(field << 3), varint(value)]);
+}
+
+function destination(type, name) {
+  return Buffer.concat([protoVarint(1, type), protoBytes(2, Buffer.from(name, "utf8"))]);
+}
+
+function localTransaction(connectionId, transactionId) {
+  const local = Buffer.concat([
+    protoBytes(1, Buffer.from(connectionId, "utf8")),
+    protoVarint(2, transactionId),
+  ]);
+  return protoBytes(1, local);
+}
+
+function command(type, payload) {
+  const data = Buffer.concat([Buffer.from([type]), varint(payload.length), payload]);
+  return Buffer.concat([int32(data.length + 5), Buffer.from([1]), data]);
+}
+
+function adler32(payload) {
+  let a = 1;
+  let b = 0;
+  for (const byte of payload) {
+    a = (a + byte) % 65521;
+    b = (b + a) % 65521;
+  }
+  return ((b << 16) | a) >>> 0;
+}
+
+function journalBatch(records) {
+  const payload = Buffer.concat(records);
+  const header = Buffer.concat([
+    int32(28),
+    Buffer.from([2]),
+    Buffer.from("WRITE BATCH", "ascii"),
+    int32(payload.length),
+    uint64(adler32(payload)),
+  ]);
+  return Buffer.concat([header, payload, Buffer.from([0x2d, 0x71, 0x4d, 0x61, 0x34])]);
 }
 
 async function put(fixture, relativePath, content) {
@@ -102,4 +176,45 @@ await put(
   ),
 );
 
-process.stdout.write(`Generated synthetic fixtures in ${fixtureRoot}\n`);
+const transactionInfo = localTransaction("ID:CLIENT:1", 42);
+const addMessage = Buffer.concat([
+  protoBytes(1, transactionInfo),
+  protoBytes(2, destination(0, "ORDERS")),
+  protoBytes(3, Buffer.from("ID:MESSAGE:1", "utf8")),
+  protoBytes(4, Buffer.from([0x01, 0x02])),
+]);
+const subscription = Buffer.concat([
+  protoBytes(1, destination(1, "PRICES")),
+  protoBytes(2, Buffer.from("client-a:prices", "utf8")),
+]);
+const commit = protoBytes(1, transactionInfo);
+await put(
+  "kahadb-framing",
+  "db-1.log",
+  journalBatch([
+    command(1, addMessage),
+    command(7, subscription),
+    command(4, commit),
+  ]),
+);
+
+const fixtureNames = [
+  "simple-queue",
+  "durable-topic",
+  "transaction",
+  "advisory",
+  "corrupt",
+  "truncated",
+  "false-positive",
+  "kahadb-framing",
+];
+await mkdir(expectedRoot, { recursive: true });
+for (const fixtureName of fixtureNames) {
+  const scan = await scanPath(path.join(fixtureRoot, fixtureName));
+  await writeFile(
+    path.join(expectedRoot, `${fixtureName}.json`),
+    `${JSON.stringify(scan.normalized, null, 2)}\n`,
+  );
+}
+
+process.stdout.write(`Generated synthetic fixtures and golden results in ${fixtureRoot}\n`);

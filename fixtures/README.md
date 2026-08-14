@@ -5,9 +5,11 @@ read-only evidence scanner.
 
 > **Synthetic fixture != real ActiveMQ-generated store.**
 
-They exercise filenames, printable strings, malformed bytes, truncation, and
-scanner limits. They must not be cited as proof that MQ Watcher parses a real
-KahaDB journal. Real, redistributable ActiveMQ fixtures may be added later under
+They exercise filenames, printable strings, malformed bytes, truncation,
+scanner limits, and a generated KahaDB framing conformance case. They must not
+be cited as proof that MQ Watcher parses a real broker-produced KahaDB store.
+The conformance bytes follow source-level batch, record, and command-envelope
+rules, but remain synthetic. Real, redistributable ActiveMQ fixtures may be added later under
 `activemq/<version>/` with their generator version, commands, license, and
 checksums documented beside them.
 

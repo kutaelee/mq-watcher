@@ -1,12 +1,36 @@
 {
   "storeType": "Unknown Store Layout",
-  "files": [{ "path": "notes.bin", "size": 58, "kind": "other", "confidence": "Observed" }],
+  "files": [
+    {
+      "path": "notes.bin",
+      "size": 58,
+      "kind": "other",
+      "confidence": "Observed"
+    }
+  ],
   "destinations": [],
   "subscriptions": [],
   "messageCandidates": [],
   "messageIds": [],
   "offsets": [],
-  "totals": { "bytes": 58, "journalFiles": 0, "advisoryRecords": 0, "scannedBytes": 58 },
-  "warnings": ["Store 유형을 확정하지 않았습니다. 파일 목록과 Raw 문자열을 직접 확인하세요."],
-  "truncated": { "messages": false, "strings": false }
+  "structured": {
+    "status": "Unknown",
+    "confidence": "Unknown",
+    "records": [],
+    "warnings": [],
+    "truncated": false
+  },
+  "totals": {
+    "bytes": 58,
+    "journalFiles": 0,
+    "advisoryRecords": 0,
+    "scannedBytes": 58
+  },
+  "warnings": [
+    "Store 유형을 확정하지 않았습니다. 파일 목록과 Raw 문자열을 직접 확인하세요."
+  ],
+  "truncated": {
+    "messages": false,
+    "strings": false
+  }
 }
