@@ -7,6 +7,11 @@ type Variables = Record<string, string | number>;
 
 const messages: Record<Locale, Record<string, string>> = {
   ko: {
+    "tabs.label": "열린 저장소",
+    "tabs.add": "저장소 추가",
+    "tabs.cached": "복원됨",
+    "tabs.close": "{name} 탭 닫기",
+    "tabs.limit": "동시에 열 수 있는 저장소는 최대 {count}개입니다. 기존 탭을 닫은 뒤 다시 시도해 주세요.",
     "brand.subtitle": "저장소 증거 탐색기",
     "header.readOnly": "원본 보호 모드",
     "header.search": "전체 검색",
@@ -251,6 +256,11 @@ const messages: Record<Locale, Record<string, string>> = {
     ,"evidence.interpretation.advisory.pattern": "원문 문자열과 제한된 HEX 미리보기에 따른 Advisory 후보이며 구조화 명령 해석 결과가 아닙니다."
   },
   en: {
+    "tabs.label": "Open stores",
+    "tabs.add": "Add store",
+    "tabs.cached": "restored",
+    "tabs.close": "Close {name}",
+    "tabs.limit": "You can open up to {count} stores at once. Close an existing tab and try again.",
     "brand.subtitle": "STORE EVIDENCE EXPLORER",
     "header.readOnly": "Source protected",
     "header.search": "Search all",

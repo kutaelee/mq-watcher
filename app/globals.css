@@ -159,6 +159,18 @@ code, pre, .mono-cell, .mono-value {
   transition: margin-right .2s ease;
 }
 .main-content.with-detail { margin-right: var(--detail); }
+.store-tabs { min-width: 0; height: 42px; display: flex; align-items: end; gap: 3px; padding: 6px 14px 0; overflow-x: auto; border-bottom: 1px solid var(--border); background: var(--panel); scrollbar-width: thin; }
+.store-tab { min-width: 130px; max-width: 240px; height: 35px; display: flex; align-items: center; gap: 6px; padding: 0 7px 0 10px; border: 1px solid transparent; border-bottom: 0; border-radius: 8px 8px 0 0; background: transparent; color: var(--text-soft); cursor: pointer; }
+.store-tab:hover { background: var(--panel-soft); color: var(--text); }
+.store-tab.active { border-color: var(--border); background: var(--bg); color: var(--text); box-shadow: 0 2px 0 var(--bg); }
+.store-tab > span:not(.store-tab-close) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; font-size: 10px; font-weight: 650; }
+.store-tab small { flex: 0 0 auto; color: var(--muted); font-size: 8px; }
+.store-tab-close { width: 20px; height: 20px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 5px; color: var(--muted); }
+.store-tab-close:hover { background: var(--border); color: var(--text); }
+.store-tab-add { height: 30px; flex: 0 0 auto; display: flex; align-items: center; gap: 5px; margin-bottom: 3px; padding: 0 9px; border: 1px dashed var(--border-strong); border-radius: 7px; background: transparent; color: var(--text-soft); font-size: 9px; cursor: pointer; }
+.store-tab-add:hover:not(:disabled) { border-color: var(--primary); color: var(--primary-strong); }
+.store-tab-add:disabled { opacity: .45; cursor: not-allowed; }
+.store-tab-cap { align-self: center; margin: 0 0 3px auto; color: var(--muted); font: 600 9px var(--font-geist-mono), monospace; }
 .page-frame { width: 100%; max-width: 1500px; margin: 0 auto; padding: 26px 28px 64px; }
 .page-heading { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
 .breadcrumb { gap: 5px; margin-bottom: 8px; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .09em; font-weight: 700; }
@@ -330,7 +342,7 @@ tbody tr:last-child td { border-bottom: 0; }
 .method-list, .tag-list { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 12px; }
 .class-card .button { align-self: flex-start; margin-top: auto; }
 
-.detail-panel { position: fixed; top: var(--topbar); right: 0; bottom: 0; z-index: 35; width: var(--detail); background: var(--panel); border-left: 1px solid var(--border); box-shadow: -10px 0 30px rgba(27, 39, 64, .05); }
+.detail-panel { position: fixed; top: var(--topbar); right: 0; bottom: 0; z-index: 35; width: var(--detail); min-width: 0; overflow: hidden; background: var(--panel); border-left: 1px solid var(--border); box-shadow: -10px 0 30px rgba(27, 39, 64, .05); }
 .detail-head { height: 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; border-bottom: 1px solid var(--border); }
 .detail-head strong { display: block; max-width: 300px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .detail-head button { width: 30px; height: 30px; color: var(--muted); border-radius: 7px; }
@@ -367,7 +379,9 @@ tbody tr:last-child td { border-bottom: 0; }
 .strings-list > div { display: grid; grid-template-columns: 76px minmax(0, 1fr) auto; gap: 7px; align-items: flex-start; padding: 7px; border-radius: 6px; background: var(--panel-soft); }
 .strings-list code { color: var(--muted); font-size: 8px; }
 .strings-list span { overflow-wrap: anywhere; font: 10px/1.45 var(--font-geist-mono), monospace; }
-.hex-view { width: 100%; max-width: 100%; max-height: 390px; margin: 0; padding: 11px; overflow: auto; scrollbar-gutter: stable; border-radius: 8px; background: #0b1320; color: #b9d2f8; font-size: 7px; line-height: 1.65; white-space: pre; }
+.detail-scroll, .detail-scroll .scroll-viewport, .detail-body, .detail-tabs, .detail-tabs [data-radix-tabs-content] { min-width: 0; max-width: 100%; }
+.detail-scroll .scroll-viewport > div { min-width: 0 !important; max-width: 100%; display: block !important; }
+.hex-view { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; max-height: 390px; margin: 0; padding: 11px; overflow-x: scroll; overflow-y: auto; scrollbar-gutter: stable both-edges; border-radius: 8px; background: #0b1320; color: #b9d2f8; font-size: 7px; line-height: 1.65; white-space: pre; }
 .hex-view::-webkit-scrollbar { width: 7px; height: 7px; }
 .hex-view::-webkit-scrollbar-thumb { border-radius: 999px; background: #52647f; }
 .hex-view::-webkit-scrollbar-corner { background: transparent; }

@@ -28,6 +28,7 @@ import {
   OctagonX,
   PanelRightClose,
   PanelRightOpen,
+  Plus,
   Search,
   ShieldCheck,
   Square,
@@ -45,7 +46,8 @@ import {
   useState,
 } from "react";
 import { I18nProvider, useI18n, type Locale } from "@/app/lib/i18n";
-import { readScanCache, writeScanCache } from "@/app/lib/scan-cache";
+import { readScanCache, readWorkbenchState, writeScanCache, writeWorkbenchState } from "@/app/lib/scan-cache";
+import { closeSession, findReusableSession, MAX_STORE_SESSIONS, restoreSessions, sessionId } from "@/app/lib/workbench.mjs";
 import type {
   Confidence,
   DestinationRecord,
@@ -89,6 +91,20 @@ type Selected =
 
 type ContextHelp = { title: string; body: string; classes: string[] };
 type Translator = (key: string, variables?: Record<string, string | number>) => string;
+
+type StoreSession = {
+  id: string;
+  signature: string;
+  name: string;
+  result: ScanResult | null;
+  activeView: ViewId;
+  selected: Selected;
+  status: "scanning" | "ready" | "error";
+  progress: WorkerProgress;
+  error: string;
+  openedAt: string;
+  restored: boolean;
+};
 
 type TableColumn<T> = {
   key: string;
@@ -266,19 +282,37 @@ export default function StoreExplorer() {
 function ExplorerApp() {
   const { t, locale, setLocale } = useI18n();
   const help = useMemo(() => makeHelp(t), [t]);
-  const [activeView, setActiveView] = useState<ViewId>("overview");
-  const [result, setResult] = useState<ScanResult | null>(null);
-  const [selected, setSelected] = useState<Selected>(null);
+  const [sessions, setSessions] = useState<StoreSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [restored, setRestored] = useState(false);
   const [contextHelp, setContextHelp] = useState<ContextHelp | null>(null);
-  const [progress, setProgress] = useState<WorkerProgress>(EMPTY_PROGRESS);
-  const [isScanning, setIsScanning] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
   const [error, setError] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [detailOpen, setDetailOpen] = useState(true);
   const [dark, setDark] = useState(false);
-  const workerRef = useRef<Worker | null>(null);
+  const workersRef = useRef(new Map<string, Worker>());
+  const activeSession = sessions.find((session) => session.id === activeSessionId) ?? null;
+  const result = activeSession?.result ?? null;
+  const activeView = activeSession?.activeView ?? "overview";
+  const selected = activeSession?.selected ?? null;
+  const progress = activeSession?.progress ?? EMPTY_PROGRESS;
+  const isScanning = activeSession?.status === "scanning";
+
+  const updateSession = (id: string, update: Partial<StoreSession> | ((session: StoreSession) => Partial<StoreSession>)) => {
+    setSessions((current) => current.map((session) => session.id === id
+      ? { ...session, ...(typeof update === "function" ? update(session) : update) }
+      : session));
+  };
+
+  const setActiveView = (view: ViewId) => {
+    if (activeSessionId) updateSession(activeSessionId, { activeView: view });
+  };
+
+  const setSelected = (value: Selected) => {
+    if (activeSessionId) updateSession(activeSessionId, { selected: value });
+  };
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
@@ -296,7 +330,32 @@ function ExplorerApp() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  useEffect(() => () => workerRef.current?.terminate(), []);
+  useEffect(() => {
+    readWorkbenchState().then((state) => {
+      const cached = restoreSessions<StoreSession>(state);
+      setSessions(cached);
+      setActiveSessionId(cached.some((session) => session.id === state?.activeSessionId) ? state?.activeSessionId ?? null : cached[0]?.id ?? null);
+    }).catch(() => undefined).finally(() => setRestored(true));
+  }, []);
+
+  useEffect(() => {
+    if (!restored) return;
+    const ready = sessions.filter((session) => session.status === "ready" && session.result).map((session) => ({
+      id: session.id,
+      signature: session.signature,
+      name: session.name,
+      result: session.result as ScanResult,
+      activeView: session.activeView,
+      selected: session.selected,
+      openedAt: session.openedAt,
+    }));
+    writeWorkbenchState({ id: "current", activeSessionId, sessions: ready }).catch(() => undefined);
+  }, [sessions, activeSessionId, restored]);
+
+  useEffect(() => () => {
+    workersRef.current.forEach((worker) => worker.terminate());
+    workersRef.current.clear();
+  }, []);
 
   const percentage = progress.totalBytes
     ? Math.min(100, Math.round((progress.scannedBytes / progress.totalBytes) * 100))
@@ -313,53 +372,66 @@ function ExplorerApp() {
       const handle = await window.showDirectoryPicker({ mode: "read" });
       const files = await collectDirectoryFiles(handle);
       const signature = makeSignature(handle.name, files);
-      const cached = await readScanCache(signature).catch(() => null);
-      if (cached) {
-        setResult(cached);
-        setActiveView("overview");
-        setSelected(null);
+      const duplicate = findReusableSession(sessions, signature);
+      if (duplicate) {
+        setActiveSessionId(duplicate.id);
         setIsPreparing(false);
         return;
       }
-      setResult(null);
-      setSelected(null);
-      setProgress({
+      if (sessions.length >= MAX_STORE_SESSIONS) {
+        setError(t("tabs.limit", { count: MAX_STORE_SESSIONS }));
+        setIsPreparing(false);
+        return;
+      }
+      const id = sessionId(signature);
+      const cached = await readScanCache(signature).catch(() => null);
+      if (cached) {
+        setSessions((current) => [...current, {
+          id, signature, name: handle.name, result: cached, activeView: "overview", selected: null,
+          status: "ready", progress: EMPTY_PROGRESS, error: "", openedAt: new Date().toISOString(), restored: true,
+        }]);
+        setActiveSessionId(id);
+        setIsPreparing(false);
+        return;
+      }
+      const initialProgress = {
         ...EMPTY_PROGRESS,
         fileCount: files.length,
         totalBytes: files.reduce((sum, item) => sum + item.file.size, 0),
-      });
+      };
+      setSessions((current) => [...current, {
+        id, signature, name: handle.name, result: null, activeView: "overview", selected: null,
+        status: "scanning", progress: initialProgress, error: "", openedAt: new Date().toISOString(), restored: false,
+      }]);
+      setActiveSessionId(id);
       const worker = new Worker("/store-scanner.worker.js", { type: "module" });
-      workerRef.current = worker;
+      workersRef.current.set(id, worker);
       worker.onmessage = async (event: MessageEvent<WorkerMessage>) => {
-        if (event.data.type === "progress") setProgress(event.data);
+        if (event.data.type === "progress") updateSession(id, { progress: event.data });
         if (event.data.type === "complete") {
-          setResult(event.data.result);
-          setActiveView("overview");
-          setIsScanning(false);
+          updateSession(id, { result: event.data.result, activeView: "overview", status: "ready", restored: false });
           worker.terminate();
-          workerRef.current = null;
+          workersRef.current.delete(id);
           await writeScanCache(event.data.result).catch(() => undefined);
         }
         if (event.data.type === "cancelled") {
-          setIsScanning(false);
           worker.terminate();
-          workerRef.current = null;
+          workersRef.current.delete(id);
+          setSessions((current) => current.filter((session) => session.id !== id));
+          setActiveSessionId((current) => current === id ? null : current);
         }
         if (event.data.type === "error") {
-          setError(event.data.message);
-          setIsScanning(false);
+          updateSession(id, { error: event.data.message, status: "error" });
           worker.terminate();
-          workerRef.current = null;
+          workersRef.current.delete(id);
         }
       };
       worker.onerror = (event) => {
-        setError(event.message || t("error.scan"));
-        setIsScanning(false);
+        updateSession(id, { error: event.message || t("error.scan"), status: "error" });
         worker.terminate();
-        workerRef.current = null;
+        workersRef.current.delete(id);
       };
       setIsPreparing(false);
-      setIsScanning(true);
       worker.postMessage({ type: "scan", signature, directoryName: handle.name, files });
     } catch (caught) {
       setIsPreparing(false);
@@ -373,9 +445,22 @@ function ExplorerApp() {
     try {
       const response = await fetch("/demo-result.json", { cache: "no-store" });
       if (!response.ok) throw new Error(t("error.demo"));
-      setResult(await response.json() as ScanResult);
-      setActiveView("overview");
-      setSelected(null);
+      const demo = await response.json() as ScanResult;
+      const duplicate = findReusableSession(sessions, demo.signature);
+      if (duplicate) {
+        setActiveSessionId(duplicate.id);
+        return;
+      }
+      if (sessions.length >= MAX_STORE_SESSIONS) {
+        setError(t("tabs.limit", { count: MAX_STORE_SESSIONS }));
+        return;
+      }
+      const id = sessionId(demo.signature);
+      setSessions((current) => [...current, {
+        id, signature: demo.signature, name: demo.directoryName, result: demo, activeView: "overview", selected: null,
+        status: "ready", progress: EMPTY_PROGRESS, error: "", openedAt: new Date().toISOString(), restored: false,
+      }]);
+      setActiveSessionId(id);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     }
@@ -404,6 +489,14 @@ function ExplorerApp() {
 
   const searchCount = Object.values(searchResults).reduce((sum, items) => sum + items.length, 0);
   const activeNavLabel = t(`nav.${activeView}`);
+
+  const closeStore = (id: string) => {
+    workersRef.current.get(id)?.terminate();
+    workersRef.current.delete(id);
+    const next = closeSession(sessions, activeSessionId, id);
+    setSessions(next.sessions);
+    setActiveSessionId(next.activeSessionId);
+  };
 
   return (
     <div className="app-shell">
@@ -448,7 +541,7 @@ function ExplorerApp() {
               <div className="source-flags"><Badge tone={result.storeKind === "Unknown Store Layout" ? "amber" : "blue"}>{displayStore(result, t).label}</Badge></div>
             </>
           ) : <div className="source-empty">{t("source.none")}</div>}
-          <Button className="source-button" onClick={openDirectory} disabled={isPreparing || isScanning}>
+          <Button className="source-button" onClick={openDirectory} disabled={isPreparing}>
             {isPreparing ? <LoaderCircle className="spin" size={15} /> : <FolderOpen size={15} />}
             {result ? t("source.change") : t("source.open")}
           </Button>
@@ -473,6 +566,16 @@ function ExplorerApp() {
       </aside>
 
       <main className={`main-content ${detailOpen ? "with-detail" : ""}`}>
+        <div className="store-tabs" role="tablist" aria-label={t("tabs.label")}>
+          {sessions.map((session) => <button key={session.id} role="tab" aria-selected={session.id === activeSessionId} className={`store-tab ${session.id === activeSessionId ? "active" : ""}`} onClick={() => setActiveSessionId(session.id)}>
+            {session.status === "scanning" ? <LoaderCircle className="spin" size={13} /> : <HardDrive size={13} />}
+            <span title={session.name}>{session.name}</span>
+            {session.restored ? <small>{t("tabs.cached")}</small> : null}
+            <span className="store-tab-close" role="button" tabIndex={0} aria-label={t("tabs.close", { name: session.name })} onClick={(event) => { event.stopPropagation(); closeStore(session.id); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); closeStore(session.id); } }}><X size={12} /></span>
+          </button>)}
+          <button className="store-tab-add" onClick={openDirectory} disabled={isPreparing || sessions.length >= MAX_STORE_SESSIONS} title={t("tabs.add")}><Plus size={14} /><span>{t("tabs.add")}</span></button>
+          <span className="store-tab-cap">{sessions.length}/{MAX_STORE_SESSIONS}</span>
+        </div>
         <div className="page-frame">
           <div className="page-heading">
             <div>
@@ -491,18 +594,18 @@ function ExplorerApp() {
             </div>
           ) : null}
 
-          {error ? <div className="error-alert"><AlertCircle size={18} /><div><strong>{t("error.title")}</strong><p>{error}</p></div></div> : null}
-          {isPreparing || isScanning ? <ScanProgress progress={progress} percentage={percentage} preparing={isPreparing} onCancel={() => workerRef.current?.postMessage({ type: "cancel" })} /> : null}
+          {error || activeSession?.error ? <div className="error-alert"><AlertCircle size={18} /><div><strong>{t("error.title")}</strong><p>{error || activeSession?.error}</p></div></div> : null}
+          {isPreparing || isScanning ? <ScanProgress progress={progress} percentage={percentage} preparing={isPreparing} onCancel={() => activeSessionId && workersRef.current.get(activeSessionId)?.postMessage({ type: "cancel" })} /> : null}
           {!result && !isScanning && !isPreparing ? <EmptyExplorer onOpen={openDirectory} onDemo={loadDemo} /> : null}
 
           {result && !isScanning ? (
             <>
               {activeView === "overview" ? <Overview result={result} help={help} onHelp={setContextHelp} onNavigate={navigate} onSelect={selectItem} /> : null}
-              {activeView === "destinations" ? <DestinationsView result={result} help={help} onSelect={selectItem} onHelp={setContextHelp} /> : null}
-              {activeView === "subscriptions" ? <SubscriptionsView result={result} help={help} onSelect={selectItem} onHelp={setContextHelp} /> : null}
-              {activeView === "messages" ? <MessagesView result={result} onSelect={selectItem} /> : null}
-              {activeView === "evidence" ? <EvidenceView result={result} help={help} onSelect={selectItem} onHelp={setContextHelp} /> : null}
-              {activeView === "files" ? <FilesView result={result} onSelect={selectItem} /> : null}
+              {activeView === "destinations" ? <DestinationsView key={`${result.signature}:destinations`} stateKey={`${result.signature}:destinations`} result={result} help={help} onSelect={selectItem} onHelp={setContextHelp} /> : null}
+              {activeView === "subscriptions" ? <SubscriptionsView key={`${result.signature}:subscriptions`} stateKey={`${result.signature}:subscriptions`} result={result} help={help} onSelect={selectItem} onHelp={setContextHelp} /> : null}
+              {activeView === "messages" ? <MessagesView key={`${result.signature}:messages`} stateKey={`${result.signature}:messages`} result={result} onSelect={selectItem} /> : null}
+              {activeView === "evidence" ? <EvidenceView key={`${result.signature}:evidence`} stateKey={`${result.signature}:evidence`} result={result} help={help} onSelect={selectItem} onHelp={setContextHelp} /> : null}
+              {activeView === "files" ? <FilesView key={`${result.signature}:files`} stateKey={`${result.signature}:files`} result={result} onSelect={selectItem} /> : null}
             </>
           ) : null}
         </div>
@@ -598,11 +701,29 @@ function Overview({ result, help, onHelp, onNavigate, onSelect }: { result: Scan
   );
 }
 
-function DataTable<T>({ rows, columns, rowKey, onRowClick, empty }: { rows: T[]; columns: TableColumn<T>[]; rowKey: (row: T) => string; onRowClick: (row: T) => void; empty: string }) {
+function usePersistentState<T>(key: string, initial: T) {
+  const storageKey = `mq-watcher-ui:${key}`;
+  const read = () => {
+    if (typeof localStorage === "undefined") return initial;
+    try {
+      const value = localStorage.getItem(storageKey);
+      return value === null ? initial : JSON.parse(value) as T;
+    } catch {
+      return initial;
+    }
+  };
+  const [value, setValue] = useState<T>(read);
+  useEffect(() => {
+    try { localStorage.setItem(storageKey, JSON.stringify(value)); } catch { /* best-effort UI state */ }
+  }, [storageKey, value]);
+  return [value, setValue] as const;
+}
+
+function DataTable<T>({ rows, columns, rowKey, onRowClick, empty, stateKey }: { rows: T[]; columns: TableColumn<T>[]; rowKey: (row: T) => string; onRowClick: (row: T) => void; empty: string; stateKey: string }) {
   const { t, locale } = useI18n();
-  const [sort, setSort] = useState<{ key: string; direction: "asc" | "desc" } | null>(null);
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(25);
+  const [sort, setSort] = usePersistentState<{ key: string; direction: "asc" | "desc" } | null>(`${stateKey}:sort`, null);
+  const [page, setPage] = usePersistentState(`${stateKey}:page`, 0);
+  const [pageSize, setPageSize] = usePersistentState(`${stateKey}:page-size`, 25);
   const sorted = useMemo(() => {
     if (!sort) return rows;
     const column = columns.find((item) => item.key === sort.key);
@@ -640,9 +761,9 @@ function FilterBar({ value, onChange, placeholder, count, onHelp }: { value: str
   return <Card className="filter-bar"><div className="inline-search"><Search size={16} /><input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} /></div><div className="filter-count"><strong>{t("common.items", { count: count.toLocaleString(localeCode(locale)) })}</strong>{onHelp ? <button className="help-button" onClick={onHelp} aria-label={t("help.open")}><CircleHelp size={15} /></button> : null}</div></Card>;
 }
 
-function DestinationsView({ result, help, onSelect, onHelp }: { result: ScanResult; help: Record<string, ContextHelp>; onSelect: (item: Selected) => void; onHelp: (help: ContextHelp) => void }) {
+function DestinationsView({ result, help, onSelect, onHelp, stateKey }: { result: ScanResult; help: Record<string, ContextHelp>; onSelect: (item: Selected) => void; onHelp: (help: ContextHelp) => void; stateKey: string }) {
   const { t } = useI18n();
-  const [filter, setFilter] = useState("");
+  const [filter, setFilter] = usePersistentState(`${stateKey}:filter`, "");
   const rows = result.destinations.filter((item) => `${item.name} ${item.type} ${item.source}`.toLowerCase().includes(filter.toLowerCase()));
   const columns: TableColumn<DestinationRecord>[] = [
     { key: "type", label: t("table.type"), value: (item) => displayType(item.type, t), render: (item) => <Badge tone={item.type === "Queue" ? "blue" : item.type === "Topic" ? "violet" : "neutral"}>{displayType(item.type, t)}</Badge> },
@@ -651,12 +772,12 @@ function DestinationsView({ result, help, onSelect, onHelp }: { result: ScanResu
     { key: "occurrences", label: t("table.occurrences"), value: (item) => item.occurrences, render: (item) => item.occurrences.toLocaleString() },
     { key: "evidence", label: t("table.evidence"), value: (item) => t(`confidence.${item.confidence}`), render: (item) => <ConfidenceBadge confidence={item.confidence} /> },
   ];
-  return <div className="view-stack"><FilterBar value={filter} onChange={setFilter} placeholder={t("filter.destination")} count={rows.length} onHelp={() => onHelp(help.confidence)} /><DataTable key={filter} rows={rows} columns={columns} rowKey={(item) => item.id} onRowClick={(item) => onSelect({ type: "destination", value: item })} empty={t("empty.destinationFilter")} /></div>;
+  return <div className="view-stack"><FilterBar value={filter} onChange={setFilter} placeholder={t("filter.destination")} count={rows.length} onHelp={() => onHelp(help.confidence)} /><DataTable stateKey={stateKey} rows={rows} columns={columns} rowKey={(item) => item.id} onRowClick={(item) => onSelect({ type: "destination", value: item })} empty={t("empty.destinationFilter")} /></div>;
 }
 
-function SubscriptionsView({ result, help, onSelect, onHelp }: { result: ScanResult; help: Record<string, ContextHelp>; onSelect: (item: Selected) => void; onHelp: (help: ContextHelp) => void }) {
+function SubscriptionsView({ result, help, onSelect, onHelp, stateKey }: { result: ScanResult; help: Record<string, ContextHelp>; onSelect: (item: Selected) => void; onHelp: (help: ContextHelp) => void; stateKey: string }) {
   const { t } = useI18n();
-  const [filter, setFilter] = useState("");
+  const [filter, setFilter] = usePersistentState(`${stateKey}:filter`, "");
   const rows = result.subscriptions.filter((item) => `${item.rawId} ${item.connection} ${item.relatedDestination}`.toLowerCase().includes(filter.toLowerCase()));
   const columns: TableColumn<SubscriptionRecord>[] = [
     { key: "type", label: t("table.type"), value: (item) => displaySubscription(item.type, t), render: (item) => displaySubscription(item.type, t) },
@@ -666,12 +787,12 @@ function SubscriptionsView({ result, help, onSelect, onHelp }: { result: ScanRes
     { key: "store", label: t("table.relatedStore"), value: (item) => item.relatedStore, render: (item) => <span title={item.relatedStore}>{compactId(item.relatedStore, 26, 12)}</span> },
     { key: "evidence", label: t("table.evidence"), value: (item) => t(`confidence.${item.confidence}`), render: (item) => <ConfidenceBadge confidence={item.confidence} /> },
   ];
-  return <div className="view-stack"><FilterBar value={filter} onChange={setFilter} placeholder={t("filter.subscription")} count={rows.length} onHelp={() => onHelp(help.subscription)} /><DataTable key={filter} rows={rows} columns={columns} rowKey={(item) => item.id} onRowClick={(item) => onSelect({ type: "subscription", value: item })} empty={t("empty.subscription")} /></div>;
+  return <div className="view-stack"><FilterBar value={filter} onChange={setFilter} placeholder={t("filter.subscription")} count={rows.length} onHelp={() => onHelp(help.subscription)} /><DataTable stateKey={stateKey} rows={rows} columns={columns} rowKey={(item) => item.id} onRowClick={(item) => onSelect({ type: "subscription", value: item })} empty={t("empty.subscription")} /></div>;
 }
 
-function MessagesView({ result, onSelect }: { result: ScanResult; onSelect: (item: Selected) => void }) {
+function MessagesView({ result, onSelect, stateKey }: { result: ScanResult; onSelect: (item: Selected) => void; stateKey: string }) {
   const { t } = useI18n();
-  const [filter, setFilter] = useState("");
+  const [filter, setFilter] = usePersistentState(`${stateKey}:filter`, "");
   const rows = result.messages.filter((item) => `${item.journal} ${item.destination} ${item.detectedType} ${item.relatedId}`.toLowerCase().includes(filter.toLowerCase()));
   const columns: TableColumn<MessageCandidate>[] = [
     { key: "journal", label: t("table.journal"), value: (item) => item.journal },
@@ -681,16 +802,16 @@ function MessagesView({ result, onSelect }: { result: ScanResult; onSelect: (ite
     { key: "operation", label: t("table.operation"), value: (item) => displayOperation(item.operation, t), render: (item) => <Badge tone={item.operation === "Unknown" ? "neutral" : "blue"}>{displayOperation(item.operation, t)}</Badge> },
     { key: "relatedId", label: t("table.relatedId"), value: (item) => item.relatedId, className: "mono-cell", render: (item) => <span title={item.relatedId}>{compactId(item.relatedId, 20, 9)}</span> },
   ];
-  return <div className="view-stack"><FilterBar value={filter} onChange={setFilter} placeholder={t("filter.message")} count={rows.length} /><DataTable key={filter} rows={rows} columns={columns} rowKey={(item) => item.id} onRowClick={(item) => onSelect({ type: "message", value: item })} empty={t("empty.message")} /></div>;
+  return <div className="view-stack"><FilterBar value={filter} onChange={setFilter} placeholder={t("filter.message")} count={rows.length} /><DataTable stateKey={stateKey} rows={rows} columns={columns} rowKey={(item) => item.id} onRowClick={(item) => onSelect({ type: "message", value: item })} empty={t("empty.message")} /></div>;
 }
 
 function evidenceKind(kind: EvidenceLink["kind"], t: Translator) {
   return t(`evidence.kind.${kind}`);
 }
 
-function EvidenceView({ result, help, onSelect, onHelp }: { result: ScanResult; help: Record<string, ContextHelp>; onSelect: (item: Selected) => void; onHelp: (help: ContextHelp) => void }) {
+function EvidenceView({ result, help, onSelect, onHelp, stateKey }: { result: ScanResult; help: Record<string, ContextHelp>; onSelect: (item: Selected) => void; onHelp: (help: ContextHelp) => void; stateKey: string }) {
   const { t } = useI18n();
-  const [filter, setFilter] = useState("");
+  const [filter, setFilter] = usePersistentState(`${stateKey}:filter`, "");
   const rows = result.correlation.links.filter((item) =>
     `${item.kind} ${item.primaryId} ${item.destination} ${item.journal} ${item.transactionId}`.toLowerCase().includes(filter.toLowerCase()),
   );
@@ -702,12 +823,12 @@ function EvidenceView({ result, help, onSelect, onHelp }: { result: ScanResult; 
     { key: "offset", label: t("table.offset"), value: (item) => item.offset ?? -1, className: "mono-cell", render: (item) => item.offset === null ? t("type.unknown") : formatOffset(item.offset) },
     { key: "evidence", label: t("table.evidence"), value: (item) => t(`confidence.${item.confidence}`), render: (item) => <ConfidenceBadge confidence={item.confidence} /> },
   ];
-  return <div className="view-stack"><FilterBar value={filter} onChange={setFilter} placeholder={t("filter.evidence")} count={rows.length} onHelp={() => onHelp(help.correlation)} /><div className="best-effort"><Info size={15} /><span>{t("evidence.limit")}</span></div><DataTable key={filter} rows={rows} columns={columns} rowKey={(item) => item.id} onRowClick={(item) => onSelect({ type: "correlation", value: item })} empty={t("empty.evidence")} /></div>;
+  return <div className="view-stack"><FilterBar value={filter} onChange={setFilter} placeholder={t("filter.evidence")} count={rows.length} onHelp={() => onHelp(help.correlation)} /><div className="best-effort"><Info size={15} /><span>{t("evidence.limit")}</span></div><DataTable stateKey={stateKey} rows={rows} columns={columns} rowKey={(item) => item.id} onRowClick={(item) => onSelect({ type: "correlation", value: item })} empty={t("empty.evidence")} /></div>;
 }
 
-function FilesView({ result, onSelect }: { result: ScanResult; onSelect: (item: Selected) => void }) {
+function FilesView({ result, onSelect, stateKey }: { result: ScanResult; onSelect: (item: Selected) => void; stateKey: string }) {
   const { t, locale } = useI18n();
-  const [filter, setFilter] = useState("");
+  const [filter, setFilter] = usePersistentState(`${stateKey}:filter`, "");
   const rows = result.files.filter((item) => item.path.toLowerCase().includes(filter.toLowerCase()));
   const columns: TableColumn<ScanFile>[] = [
     { key: "path", label: t("table.path"), value: (item) => item.path, className: "file-path", render: (item) => <><FileArchive size={15} /> {item.path}</> },
@@ -716,7 +837,7 @@ function FilesView({ result, onSelect }: { result: ScanResult; onSelect: (item: 
     { key: "modified", label: t("table.modified"), value: (item) => item.modified, render: (item) => new Date(item.modified).toLocaleString(localeCode(locale)) },
     { key: "evidence", label: t("table.evidence"), value: (item) => t(`confidence.${item.confidence}`), render: (item) => <ConfidenceBadge confidence={item.confidence} /> },
   ];
-  return <div className="view-stack"><FilterBar value={filter} onChange={setFilter} placeholder={t("filter.file")} count={rows.length} /><DataTable key={filter} rows={rows} columns={columns} rowKey={(item) => item.path} onRowClick={(item) => onSelect({ type: "file", value: item })} empty={t("empty.fileFilter")} /></div>;
+  return <div className="view-stack"><FilterBar value={filter} onChange={setFilter} placeholder={t("filter.file")} count={rows.length} /><DataTable stateKey={stateKey} rows={rows} columns={columns} rowKey={(item) => item.path} onRowClick={(item) => onSelect({ type: "file", value: item })} empty={t("empty.fileFilter")} /></div>;
 }
 
 function DetailPanel({ selected, result, onClose, onSelect }: { selected: Selected; result: ScanResult | null; onClose: () => void; onSelect: (item: Selected) => void }) {
