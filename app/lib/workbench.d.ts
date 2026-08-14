@@ -16,3 +16,6 @@ export function buildJournalRetentionIndex(result: unknown): JournalRetentionRow
 export const MAX_TIMELINE_EVENTS: number;
 export type TimelineEvent = { id: string; file: string; dataFileId: number | null; offset: number | null; command: string; category: "subscription" | "transaction" | "message" | "record"; destination: string; primaryId: string; status: string; confidence: import("./types").Confidence };
 export function buildEvidenceTimeline(result: unknown, limit?: number): { events: TimelineEvent[]; total: number; truncated: boolean; ordering: "data-file-id-offset" };
+export function stableStringify(value: unknown): string;
+export function buildStoredZip(entries: Array<{ name: string; data: string | Uint8Array }>): Uint8Array;
+export function buildEvidenceBundle(options: { result: import("./types").ScanResult; incidentCase?: import("./types").IncidentCase | null; comparison?: SnapshotDiffRow[]; locale?: "ko" | "en"; redaction?: { identifiers?: boolean; destinations?: boolean; filePaths?: boolean; notes?: boolean }; generatedAt?: string }): Promise<{ bytes: Uint8Array; sha256: string; manifest: Record<string, unknown>; entryNames: string[] }>;

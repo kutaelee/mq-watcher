@@ -1,6 +1,24 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { addCaseNote, addCasePin, buildEvidenceTimeline, buildInvestigativeLeads, buildJournalRetentionIndex, buildSnapshotDiff, closeSession, createIncidentCase, findReusableSession, MAX_STORE_SESSIONS, restoreSessions, sessionId } from "../app/lib/workbench.mjs";
+import { buildEvidenceBundle } from "../public/workbench-export.js";
+
+function readStoredZip(bytes) {
+  const files = new Map();
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let offset = 0;
+  while (offset + 30 <= bytes.length && view.getUint32(offset, true) === 0x04034b50) {
+    const size = view.getUint32(offset + 18, true);
+    const nameLength = view.getUint16(offset + 26, true);
+    const extraLength = view.getUint16(offset + 28, true);
+    const nameStart = offset + 30;
+    const dataStart = nameStart + nameLength + extraLength;
+    const name = new TextDecoder().decode(bytes.slice(nameStart, nameStart + nameLength));
+    files.set(name, bytes.slice(dataStart, dataStart + size));
+    offset = dataStart + size;
+  }
+  return files;
+}
 
 test("session IDs and duplicate lookup are deterministic", () => {
   assert.equal(sessionId("3:store:1:abc"), sessionId("3:store:1:abc"));
@@ -89,4 +107,42 @@ test("evidence timeline uses deterministic file and offset order without timesta
   assert.deepEqual(timeline.events.map((event) => event.command), ["First", "Later"]);
   assert.equal(timeline.truncated, true);
   assert.ok(timeline.events.every((event) => !("timestamp" in event) && !("time" in event)));
+});
+
+test("evidence bundle is deterministic, checksummed, redacted, and excludes source bytes", async () => {
+  const secret = "TENANT-X-SECRET";
+  const result = {
+    signature: `signature-${secret}`, directoryName: `store-${secret}`, storeKind: "AMQ Message Store", totals: { bytes: 10 }, warnings: [`warning ${secret} SECRET.ORDERS ID:SECRET:1 private/db-1.log`],
+    files: [{ path: "private/db-1.log", name: "db-1.log", kind: "journal", size: 10, modified: 0 }],
+    destinations: [{ id: "dest-1", name: "SECRET.ORDERS", decodedName: "SECRET.ORDERS", rawName: "SECRET.ORDERS", source: "private/db-1.log" }], subscriptions: [], messages: [{ id: "message-1", journal: "private/db-1.log", destination: "SECRET.ORDERS", relatedId: "ID:SECRET:1", hex: `54 45 4e 41 4e 54 ${secret}`, strings: [] }], strings: [{ id: "raw-1", file: "private/db-1.log", offset: 0, value: `${secret} SECRET.ORDERS ID:SECRET:1`, confidence: "Pattern Match" }],
+    structured: { records: [{ file: "private/db-1.log", location: { dataFileId: 1, offset: 2 }, command: "KahaAddMessageCommand", status: "Parsed", confidence: "Parsed", destination: { name: "SECRET.ORDERS" }, messageId: "ID:SECRET:1", warning: `${secret} private/db-1.log` }] },
+    correlation: { links: [{ id: "link-1", evidenceRefs: [], interpretation: `${secret} SECRET.ORDERS ID:SECRET:1 private/db-1.log` }], counts: {} },
+  };
+  const incidentCase = { id: "case-1", title: `title ${secret}`, hypothesis: `hypothesis ${secret}`, notes: [{ id: "note-1", text: `note ${secret}`, createdAt: "2026-01-01T00:00:00.000Z" }], pins: [], createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" };
+  const options = { result, incidentCase, locale: "en", redaction: { identifiers: true, destinations: true, filePaths: true, notes: true }, generatedAt: "2026-01-01T00:00:00.000Z" };
+  const first = await buildEvidenceBundle(options);
+  const second = await buildEvidenceBundle(options);
+  assert.deepEqual(first.bytes, second.bytes);
+  assert.equal(first.manifest.sourceFilesIncluded, false);
+  const entries = readStoredZip(first.bytes);
+  assert.deepEqual([...entries.keys()].sort(), ["README.txt", "SHA256SUMS.txt", "evidence.json", "manifest.json", "report.html"]);
+  const allText = [...entries.values()].map((bytes) => new TextDecoder().decode(bytes)).join("\n");
+  for (const canary of [secret, "SECRET.ORDERS", "ID:SECRET:1", "private/db-1.log", "db-1.log"]) assert.ok(!allText.includes(canary), `leaked ${canary}`);
+  assert.match(new TextDecoder().decode(entries.get("evidence.json")), /REDACTED_HEX_PREVIEW/);
+  const sums = new TextDecoder().decode(entries.get("SHA256SUMS.txt")).trim().split("\n");
+  const crypto = await import("node:crypto");
+  for (const line of sums) {
+    const [expected, name] = line.split(/\s{2}/);
+    assert.equal(crypto.createHash("sha256").update(entries.get(name)).digest("hex"), expected);
+  }
+});
+
+test("chunked export reports monotonic progress and honors cancellation", async () => {
+  const records = Array.from({ length: 2200 }, (_, index) => ({ file: "db-1.log", location: { dataFileId: 1, offset: index }, command: "KahaAddMessageCommand", status: "Parsed", confidence: "Parsed", messageId: `ID:${index}` }));
+  const result = { signature: "sig", directoryName: "store", storeKind: "AMQ Message Store", totals: {}, warnings: [], files: [], destinations: [], subscriptions: [], messages: [], strings: [], structured: { records }, correlation: { links: [], counts: {} } };
+  const progress = [];
+  let shouldCancel = false;
+  await assert.rejects(() => buildEvidenceBundle({ result }, { onProgress: (event) => { progress.push(event.progress); if (event.progress >= 36) shouldCancel = true; }, isCancelled: () => shouldCancel }), { name: "AbortError" });
+  assert.ok(progress.length > 2);
+  assert.deepEqual(progress, [...progress].sort((a, b) => a - b));
 });

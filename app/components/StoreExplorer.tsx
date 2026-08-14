@@ -14,6 +14,7 @@ import {
   Clipboard,
   Database,
   FileArchive,
+  FileDown,
   FileSearch,
   Files,
   FolderOpen,
@@ -84,8 +85,9 @@ import { SnapshotCompare } from "./compare/SnapshotCompare";
 import { IncidentCase } from "./case/IncidentCase";
 import { JournalExplorer } from "./journals/JournalExplorer";
 import { EvidenceTimeline } from "./timeline/EvidenceTimeline";
+import { EvidenceExport } from "./export/EvidenceExport";
 
-type ViewId = "overview" | "compare" | "case" | "journals" | "timeline" | "destinations" | "subscriptions" | "messages" | "evidence" | "files";
+type ViewId = "overview" | "compare" | "case" | "journals" | "timeline" | "export" | "destinations" | "subscriptions" | "messages" | "evidence" | "files";
 
 type Selected =
   | { type: "destination"; value: DestinationRecord }
@@ -145,6 +147,7 @@ const NAVIGATION: Array<{ id: ViewId; icon: typeof Gauge }> = [
   { id: "case", icon: NotebookPen },
   { id: "journals", icon: FileArchive },
   { id: "timeline", icon: Clock3 },
+  { id: "export", icon: FileDown },
   { id: "destinations", icon: Boxes },
   { id: "subscriptions", icon: Network },
   { id: "messages", icon: MessageSquareText },
@@ -629,6 +632,7 @@ function ExplorerApp() {
               {activeView === "case" ? <IncidentCase result={result} pinCandidate={makePinCandidate(selected, result)} /> : null}
               {activeView === "journals" ? <JournalExplorer result={result} /> : null}
               {activeView === "timeline" ? <EvidenceTimeline result={result} /> : null}
+              {activeView === "export" ? <EvidenceExport result={result} sessions={sessions} /> : null}
               {activeView === "destinations" ? <DestinationsView key={`${result.signature}:destinations`} stateKey={`${result.signature}:destinations`} result={result} help={help} onSelect={selectItem} onHelp={setContextHelp} /> : null}
               {activeView === "subscriptions" ? <SubscriptionsView key={`${result.signature}:subscriptions`} stateKey={`${result.signature}:subscriptions`} result={result} help={help} onSelect={selectItem} onHelp={setContextHelp} /> : null}
               {activeView === "messages" ? <MessagesView key={`${result.signature}:messages`} stateKey={`${result.signature}:messages`} result={result} onSelect={selectItem} /> : null}
