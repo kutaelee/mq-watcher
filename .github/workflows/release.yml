@@ -21,6 +21,7 @@ jobs:
       - name: Verify tag matches package version
         run: node -e "if ('v' + require('./package.json').version !== process.env.GITHUB_REF_NAME) process.exit(1)"
       - run: npm run lint
+      - run: npm run typecheck
       - run: npm test
       - run: npm run test:fixtures
       - run: npm run test:broker-fixtures
