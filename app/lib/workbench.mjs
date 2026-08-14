@@ -1,10 +1,47 @@
 export const MAX_STORE_SESSIONS = 6;
 
-export async function buildStoreSignature(files, scannerVersion = "4") {
-  const canonical = [...files].map(({ relativePath, file }) => `${String(relativePath).replaceAll("\\", "/")}:${file.size}:${file.lastModified}`).sort().join("\n");
-  const digest = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${scannerVersion}\n${canonical}`));
-  const hex = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `${scannerVersion}:inventory-sha256:${hex}`;
+export { buildContentStoreSignature as buildStoreSignature } from "../../public/store-identity.js";
+
+let identityRequestSequence = 0;
+
+export function buildStoreSignatureInWorker(files, scannerVersion = "4", options = {}) {
+  const signal = options.signal;
+  const createWorker = options.createWorker ?? (() => new Worker("/store-identity.worker.js", { type: "module" }));
+  if (signal?.aborted) return Promise.reject(signal.reason instanceof Error ? signal.reason : new DOMException("Store identity calculation was cancelled.", "AbortError"));
+  const worker = createWorker();
+  const requestId = `identity-${++identityRequestSequence}`;
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => {
+      signal?.removeEventListener("abort", onAbort);
+      worker.onmessage = null;
+      worker.onerror = null;
+      worker.terminate();
+    };
+    const finish = (callback) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      callback();
+    };
+    const onAbort = () => {
+      try { worker.postMessage({ type: "cancel", requestId }); } catch { /* worker may already be gone */ }
+      finish(() => reject(signal?.reason instanceof Error ? signal.reason : new DOMException("Store identity calculation was cancelled.", "AbortError")));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+    worker.onmessage = (event) => {
+      if (event.data?.requestId !== requestId || settled) return;
+      if (event.data.type === "progress") {
+        try { options.onProgress?.(event.data); } catch (error) { finish(() => reject(error)); }
+      }
+      else if (event.data.type === "complete") finish(() => resolve(event.data.signature));
+      else if (event.data.type === "cancelled") finish(() => reject(new DOMException("Store identity calculation was cancelled.", "AbortError")));
+      else if (event.data.type === "error") finish(() => reject(new Error(event.data.message)));
+    };
+    worker.onerror = (event) => finish(() => reject(new Error(event.message || "Store identity worker failed.")));
+    try { worker.postMessage({ type: "identify", requestId, files, scannerVersion, reportProgress: Boolean(options.onProgress) }); }
+    catch (error) { finish(() => reject(error)); }
+  });
 }
 
 export class SignatureReservationRegistry {

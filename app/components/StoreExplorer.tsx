@@ -51,7 +51,7 @@ import {
 } from "react";
 import { I18nProvider, useI18n, type Locale } from "@/app/lib/i18n";
 import { enqueueScanCacheWrite, readScanCache, readWorkbenchState, writeScanCache, writeWorkbenchState } from "@/app/lib/scan-cache";
-import { buildStoreSignature, closeSession, findReusableSession, MAX_STORE_SESSIONS, restoreSessions, sessionId, SessionResourceLedger, SignatureReservationRegistry } from "@/app/lib/workbench.mjs";
+import { buildStoreSignatureInWorker, closeSession, findReusableSession, MAX_STORE_SESSIONS, restoreSessions, sessionId, SessionResourceLedger, SignatureReservationRegistry } from "@/app/lib/workbench.mjs";
 import type {
   CasePin,
   Confidence,
@@ -403,20 +403,25 @@ function ExplorerApp() {
       setIsPreparing(true);
       const handle = await window.showDirectoryPicker({ mode: "read" });
       const files = await collectDirectoryFiles(handle, controller.signal);
-      const signature = await buildStoreSignature(files, SCANNER_VERSION);
+      const signature = await buildStoreSignatureInWorker(files, SCANNER_VERSION, { signal: controller.signal });
+      controller.signal.throwIfAborted();
       const duplicate = findReusableSession(sessionsRef.current, signature);
       if (duplicate) {
         setActiveSessionId(duplicate.id);
         controller.abort();
-        preparationControllerRef.current = null;
-        setIsPreparing(false);
+        if (preparationControllerRef.current === controller) {
+          preparationControllerRef.current = null;
+          setIsPreparing(false);
+        }
         return;
       }
       if (sessionsRef.current.length >= MAX_STORE_SESSIONS) {
         setError(t("tabs.limit", { count: MAX_STORE_SESSIONS }));
         controller.abort();
-        preparationControllerRef.current = null;
-        setIsPreparing(false);
+        if (preparationControllerRef.current === controller) {
+          preparationControllerRef.current = null;
+          setIsPreparing(false);
+        }
         return;
       }
       const id = sessionId(signature);
@@ -424,8 +429,10 @@ function ExplorerApp() {
       if (!reservation.accepted) {
         setActiveSessionId(id);
         controller.abort();
-        preparationControllerRef.current = null;
-        setIsPreparing(false);
+        if (preparationControllerRef.current === controller) {
+          preparationControllerRef.current = null;
+          setIsPreparing(false);
+        }
         return;
       }
       const initialProgress = {
@@ -448,8 +455,10 @@ function ExplorerApp() {
         setSessions((current) => current.map((session) => session.id === id && session.scanToken === reservation.token ? { ...session, result: cached, status: "ready", restored: true, sourceAccess: "granted", scanToken: undefined } : session));
         reservationsRef.current.release(signature, reservation.token);
         resourcesRef.current.cleanup(id);
-        preparationControllerRef.current = null;
-        setIsPreparing(false);
+        if (preparationControllerRef.current === controller) {
+          preparationControllerRef.current = null;
+          setIsPreparing(false);
+        }
         return;
       }
       const worker = new Worker("/store-scanner.worker.js", { type: "module" });
@@ -496,15 +505,20 @@ function ExplorerApp() {
         resourcesRef.current.cleanup(id);
         workersRef.current.delete(id);
       };
-      setIsPreparing(false);
-      preparationControllerRef.current = null;
+      if (preparationControllerRef.current === controller) {
+        setIsPreparing(false);
+        preparationControllerRef.current = null;
+      }
       worker.postMessage({ type: "scan", signature, directoryName: handle.name, files });
     } catch (caught) {
+      const isCurrentPreparation = preparationControllerRef.current === controller;
       controller.abort();
-      if (preparationControllerRef.current === controller) preparationControllerRef.current = null;
-      setIsPreparing(false);
+      if (isCurrentPreparation) {
+        preparationControllerRef.current = null;
+        setIsPreparing(false);
+      }
       if (caught instanceof DOMException && caught.name === "AbortError") return;
-      setError(caught instanceof Error ? caught.message : String(caught));
+      if (isCurrentPreparation) setError(caught instanceof Error ? caught.message : String(caught));
     }
   };
 

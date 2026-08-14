@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addCaseNote, addCasePin, buildEvidenceTimeline, buildInvestigativeLeads, buildJournalRetentionIndex, buildSnapshotDiff, buildStoreSignature, closeSession, createIncidentCase, findReusableSession, getSessionCapabilities, MAX_STORE_SESSIONS, resolveCasePin, restoreSessions, sessionId, SessionResourceLedger, SignatureReservationRegistry } from "../app/lib/workbench.mjs";
+import { addCaseNote, addCasePin, buildEvidenceTimeline, buildInvestigativeLeads, buildJournalRetentionIndex, buildSnapshotDiff, buildStoreSignature, buildStoreSignatureInWorker, closeSession, createIncidentCase, findReusableSession, getSessionCapabilities, MAX_STORE_SESSIONS, resolveCasePin, restoreSessions, sessionId, SessionResourceLedger, SignatureReservationRegistry } from "../app/lib/workbench.mjs";
+import { STORE_IDENTITY_CHUNK_BYTES } from "../public/store-identity.js";
 import { applyDatabaseUpgrade, CACHE_SCHEMA_VERSION, enqueueScanCacheWrite, planDatabaseMigration } from "../app/lib/scan-cache.ts";
 import { buildEvidenceBundle } from "../public/workbench-export.js";
 
@@ -28,16 +29,131 @@ test("session IDs and duplicate lookup are deterministic", () => {
   assert.equal(findReusableSession([existing], "same"), existing);
 });
 
-test("store identity excludes directory display name and uses canonical inventory SHA-256", async () => {
+test("store identity is content-derived, bounded, and not recomputed by ordinary session interactions", async () => {
   let sourceReads = 0;
-  const files = [{ relativePath: "db-1.log", file: { size: 10, lastModified: 7, arrayBuffer() { sourceReads += 1; throw new Error("source bytes must not be read for tab identity"); } } }, { relativePath: "lock", file: { size: 0, lastModified: 1 } }];
-  const first = await buildStoreSignature(files, "4");
-  const renamedDirectorySameInventory = await buildStoreSignature([...files].reverse(), "4");
-  const changed = await buildStoreSignature([{ relativePath: "db-1.log", file: { size: 11, lastModified: 7 } }], "4");
-  assert.equal(first, renamedDirectorySameInventory);
-  assert.notEqual(first, changed);
-  assert.match(first, /^4:inventory-sha256:[a-f0-9]{64}$/);
-  assert.equal(sourceReads, 0, "normal tab identity must not perform a whole-Store integrity read");
+  let largestRead = 0;
+  const source = (text) => {
+    const blob = new Blob([text]);
+    return {
+      size: blob.size,
+      lastModified: 7,
+      slice(start, end) {
+        sourceReads += 1;
+        largestRead = Math.max(largestRead, end - start);
+        return blob.slice(start, end);
+      },
+    };
+  };
+  const aFiles = [{ relativePath: "db-1.log", file: source("AAAA") }, { relativePath: "lock", file: source("") }];
+  const bFiles = [{ relativePath: "db-1.log", file: source("BBBB") }, { relativePath: "lock", file: source("") }];
+  const first = await buildStoreSignature(aFiles, "4");
+  const sameContentReordered = await buildStoreSignature([...aFiles].reverse(), "4");
+  const sameMetadataDifferentBytes = await buildStoreSignature(bFiles, "4");
+  assert.equal(first, sameContentReordered);
+  assert.notEqual(first, sameMetadataDifferentBytes, "AAAA and BBBB must not share a cache/session identity");
+  assert.match(first, /^4:content-sha256:[a-f0-9]{64}$/);
+  assert.ok(sourceReads > 0, "initial identity calculation must read source content");
+  assert.ok(largestRead <= STORE_IDENTITY_CHUNK_BYTES);
+
+  const reservations = new SignatureReservationRegistry();
+  const firstOpen = reservations.reserve(first);
+  assert.equal(firstOpen.accepted, true);
+  assert.equal(reservations.reserve(first).accepted, false, "a concurrent duplicate open must share one reservation");
+  const differentContentOpen = reservations.reserve(sameMetadataDifferentBytes);
+  assert.equal(differentContentOpen.accepted, true, "different source bytes must not collide with the active reservation");
+  const cache = new Map();
+  await enqueueScanCacheWrite(first, firstOpen.token, () => true, async () => cache.set(first, "AAAA"));
+  await enqueueScanCacheWrite(sameMetadataDifferentBytes, differentContentOpen.token, () => true, async () => cache.set(sameMetadataDifferentBytes, "BBBB"));
+  assert.deepEqual([...cache.values()].sort(), ["AAAA", "BBBB"], "same metadata with different content must keep separate cache entries");
+
+  const readsAfterInitialIdentity = sourceReads;
+  const session = { id: sessionId(first), signature: first };
+  assert.equal(findReusableSession([session], first), session);
+  closeSession([session], session.id, "missing");
+  sessionId(first);
+  assert.equal(sourceReads, readsAfterInitialIdentity, "ordinary tab interactions must reuse the stored signature");
+});
+
+test("store identity reads every source through bounded four MiB slices", async () => {
+  const bytes = new Uint8Array(STORE_IDENTITY_CHUNK_BYTES + 17).fill(0x41);
+  const changedTail = bytes.slice();
+  changedTail[changedTail.length - 1] = 0x42;
+  const makeFile = (content, reads) => {
+    const blob = new Blob([content]);
+    return { size: blob.size, slice(start, end) { reads.push(end - start); return blob.slice(start, end); } };
+  };
+  const firstReads = [];
+  const secondReads = [];
+  const first = await buildStoreSignature([{ relativePath: "db-1.log", file: makeFile(bytes, firstReads) }], "4");
+  const differentLastByte = await buildStoreSignature([{ relativePath: "db-1.log", file: makeFile(changedTail, secondReads) }], "4");
+  assert.notEqual(first, differentLastByte, "a difference after the first four MiB must change identity");
+  assert.deepEqual(firstReads, [STORE_IDENTITY_CHUNK_BYTES, 17]);
+  assert.deepEqual(secondReads, [STORE_IDENTITY_CHUNK_BYTES, 17]);
+  assert.ok([...firstReads, ...secondReads].every((size) => size <= STORE_IDENTITY_CHUNK_BYTES));
+});
+
+test("store identity has locale-independent canonical ordering for non-ASCII paths", async () => {
+  const first = { relativePath: "저널/é.log", file: new Blob(["one"]) };
+  const second = { relativePath: "저널/가.log", file: new Blob(["two"]) };
+  const ordered = await buildStoreSignature([first, second], "4");
+  const reversed = await buildStoreSignature([second, first], "4");
+  assert.equal(ordered, reversed);
+});
+
+test("identity worker wrapper removes listeners, terminates on completion, and ignores stale callbacks", async () => {
+  const fake = {
+    onmessage: null,
+    onerror: null,
+    terminated: 0,
+    sent: [],
+    postMessage(message) { this.sent.push(message); },
+    terminate() { this.terminated += 1; },
+  };
+  const promise = buildStoreSignatureInWorker([], "4", { createWorker: () => fake });
+  const requestId = fake.sent[0].requestId;
+  const callback = fake.onmessage;
+  callback({ data: { type: "complete", requestId, signature: "4:content-sha256:ok" } });
+  assert.equal(await promise, "4:content-sha256:ok");
+  assert.equal(fake.terminated, 1);
+  assert.equal(fake.onmessage, null);
+  assert.equal(fake.onerror, null);
+  callback({ data: { type: "complete", requestId, signature: "stale" } });
+  assert.equal(fake.terminated, 1, "late callbacks must be inert after cleanup");
+});
+
+test("identity worker wrapper aborts and cleans the worker before stale completion", async () => {
+  const controller = new AbortController();
+  const fake = {
+    onmessage: null,
+    onerror: null,
+    terminated: 0,
+    sent: [],
+    postMessage(message) { this.sent.push(message); },
+    terminate() { this.terminated += 1; },
+  };
+  const promise = buildStoreSignatureInWorker([], "4", { signal: controller.signal, createWorker: () => fake });
+  const staleCallback = fake.onmessage;
+  controller.abort();
+  await assert.rejects(promise, (error) => error?.name === "AbortError");
+  assert.deepEqual(fake.sent.map((message) => message.type), ["identify", "cancel"]);
+  assert.equal(fake.terminated, 1);
+  assert.equal(fake.onmessage, null);
+  staleCallback({ data: { type: "complete", requestId: fake.sent[0].requestId, signature: "stale" } });
+  assert.equal(fake.terminated, 1);
+});
+
+test("identity worker wrapper cleans up when request cloning fails", async () => {
+  const fake = {
+    onmessage: null,
+    onerror: null,
+    terminated: 0,
+    postMessage() { throw new DOMException("not cloneable", "DataCloneError"); },
+    terminate() { this.terminated += 1; },
+  };
+  await assert.rejects(buildStoreSignatureInWorker([], "4", { createWorker: () => fake }), (error) => error?.name === "DataCloneError");
+  assert.equal(fake.terminated, 1);
+  assert.equal(fake.onmessage, null);
+  assert.equal(fake.onerror, null);
 });
 
 test("signature reservation rejects duplicate-open races and stale generations", () => {

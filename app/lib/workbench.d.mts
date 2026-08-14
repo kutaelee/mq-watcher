@@ -1,5 +1,8 @@
 export const MAX_STORE_SESSIONS: number;
-export function buildStoreSignature(files: Array<{ relativePath: string; file: { size: number; lastModified: number } }>, scannerVersion?: string): Promise<string>;
+export type StoreIdentityFile = { size: number; slice(start?: number, end?: number): { arrayBuffer(): Promise<ArrayBuffer> } };
+export type StoreIdentityProgress = { relativePath: string; fileIndex: number; fileCount: number; readBytes: number; totalBytes: number };
+export function buildStoreSignature(files: Array<{ relativePath: string; file: StoreIdentityFile }>, scannerVersion?: string, options?: { signal?: AbortSignal; chunkBytes?: number; onProgress?: (progress: StoreIdentityProgress) => void }): Promise<string>;
+export function buildStoreSignatureInWorker(files: Array<{ relativePath: string; file: StoreIdentityFile }>, scannerVersion?: string, options?: { signal?: AbortSignal; onProgress?: (progress: StoreIdentityProgress) => void; createWorker?: () => Worker }): Promise<string>;
 export class SignatureReservationRegistry { reserve(signature: string): { accepted: boolean; token: string }; isCurrent(signature: string, token: string): boolean; release(signature: string, token: string): void; readonly size: number; }
 export class SessionResourceLedger { add(sessionId: string, resource: { kind: string; value?: unknown; remove?: () => void; clear?: (value: unknown) => void; revoke?: (value: unknown) => void }): void; cleanup(sessionId: string): void; cleanupAll(): void; count(sessionId: string): number; }
 export function sessionId(signature: string): string;
