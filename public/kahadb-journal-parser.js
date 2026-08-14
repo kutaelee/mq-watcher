@@ -158,7 +158,10 @@ function parseTransaction(value) {
   if (local instanceof Uint8Array) {
     const localFields = parseProtoFields(local);
     const connectionId = decodeText(firstField(localFields, 1, 2));
-    const transactionId = firstField(localFields, 2, 0);
+    // ActiveMQ Classic's generated KahaLocalTransactionId schema uses field 1
+    // for both connection_id (wire type 2) and transaction_id (wire type 0).
+    // Accept field 2 as well for stores produced by corrected/custom schemas.
+    const transactionId = firstField(localFields, 1, 0) ?? firstField(localFields, 2, 0);
     if (connectionId && transactionId !== undefined) {
       return `local:${connectionId}:${transactionId.toString()}`;
     }
@@ -254,6 +257,10 @@ function batchHeaderMatches(header) {
     && bytesEqual(header, BATCH_MAGIC, RECORD_HEAD_SPACE);
 }
 
+function isZeroFilled(bytes) {
+  return bytes.length > 0 && bytes.every((byte) => byte === 0);
+}
+
 export async function parseKahaDbJournalFile(file, relativePath) {
   const fileMatch = relativePath.match(/(?:^|\/)db-(\d+)\.log$/i);
   const fileId = fileMatch ? Number(fileMatch[1]) : null;
@@ -278,6 +285,8 @@ export async function parseKahaDbJournalFile(file, relativePath) {
   while (offset < file.size && output.batches.length < MAX_BATCHES && output.records.length < MAX_RECORDS) {
     const header = await readRange(file, offset, BATCH_CONTROL_RECORD_SIZE);
     if (header.length >= EOF_RECORD.length && bytesEqual(header, EOF_RECORD)) break;
+    // A preallocated KahaDB journal normally has a zero-filled unused tail.
+    if (isZeroFilled(header)) break;
     if (!batchHeaderMatches(header)) {
       output.warnings.push(`No valid KahaDB batch header at offset ${offset}.`);
       break;

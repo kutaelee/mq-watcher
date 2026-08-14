@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "BrokerFixtureProducer",
+  "activeMqVersion": "5.18.7",
+  "requiredJavaMajor": 17,
+  "javaRuntime": "openjdk version \"17.0.20\" 2026-07-21 LTS",
+  "artifact": {
+    "url": "https://repo.maven.apache.org/maven2/org/apache/activemq/activemq-all/5.18.7/activemq-all-5.18.7.jar",
+    "sha1": "c3511338ab71f95c476a5b9da52e5c83a6572873",
+    "sha256": "de4485b435c1ab316451a5b82f20d384cf74a1ff0e78448321da2649183c8774"
+  },
+  "runtimeDependencies": [
+    {
+      "file": "log4j-api-2.24.1.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/apache/logging/log4j/log4j-api/2.24.1/log4j-api-2.24.1.jar",
+      "sha1": "7ebeb12c20606373005af4232cd0ecca72613dda",
+      "sha256": "6e77bb229fc8dcaf09038beeb5e9030b22e9e01b51b458b0183ce669ebcc92ef"
+    },
+    {
+      "file": "log4j-core-2.24.1.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/apache/logging/log4j/log4j-core/2.24.1/log4j-core-2.24.1.jar",
+      "sha1": "c85285146f28d8c8962384f786e2dff04172fb43",
+      "sha256": "00bcf388472ca80a687014181763b66d777177f22cbbf179fd60e1b1ac9bc9b0"
+    }
+  ],
+  "broker": {
+    "persistent": true,
+    "adapter": "KahaDB",
+    "connector": "tcp://127.0.0.1:0",
+    "journalMaxFileLength": 1048576,
+    "preallocationScope": "entire_journal"
+  },
+  "scenarios": [
+    "persistent queue message",
+    "acknowledged queue message",
+    "committed local transaction",
+    "offline durable topic message"
+  ],
+  "files": [
+    {
+      "path": "db-1.log",
+      "size": 1048576,
+      "sha256": "545fa8ced233ed45a05bdde118107bb72caecd038caf9b06b035ae62386e8b8f"
+    },
+    {
+      "path": "db.data",
+      "size": 126976,
+      "sha256": "0a1f94bb33d5209d461bbc269aa007c4717452f1d8f962bf7b00d36e26d13856"
+    },
+    {
+      "path": "db.redo",
+      "size": 127216,
+      "sha256": "9bbb5326d022616b4597e2b42c9a9f381981dd7884421dbe493003ff803dab89"
+    }
+  ]
+}

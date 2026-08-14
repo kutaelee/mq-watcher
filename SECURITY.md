@@ -4,6 +4,10 @@
 
 MQ Watcher is designed for local, read-only examination. The CLI binds to `127.0.0.1`; the browser requests read-only directory handles and scans files in a Worker. The application has no store-upload endpoint and does not connect to a broker or external analysis service.
 
+The standalone executable has no telemetry, automatic update client, or external network listener. It extracts only its packaged application files to `%LOCALAPPDATA%\MQ Watcher\Cache\<version-hash>` on Windows or `${XDG_CACHE_HOME:-~/.cache}/mq-watcher/<version-hash>` on Linux and verifies their SHA-256 values before loading them. Selected Store files remain browser-read-only and are not copied into this application cache.
+
+Release archives are accompanied by `SHA256SUMS.txt`. Windows executables are currently unsigned and may trigger a SmartScreen warning; verify the downloaded archive hash before overriding a warning.
+
 Review dependency behavior and your network controls before using any open-source tool with sensitive evidence. A browser extension, modified build, reverse proxy, or separately installed software is outside this repository's guarantees.
 
 ## Browser storage and IndexedDB
@@ -24,4 +28,4 @@ Useful reports include the affected version/commit, platform, reproduction steps
 
 ## Supported versions
 
-Security fixes are applied to the current default branch. Until tagged releases and an explicit support policy exist, older commits are not guaranteed to receive backports.
+Security fixes are applied to the current default branch. Older releases are not guaranteed to receive backports unless their release notes state otherwise.

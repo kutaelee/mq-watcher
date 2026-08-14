@@ -51,6 +51,14 @@ function detectStore(files) {
     };
   }
 
+  const hasPageFile = paths.some((path) => /(?:^|\/)db\.(?:data|redo)$/.test(path));
+  if (hasDbLog && hasPageFile) {
+    return {
+      kind: "KahaDB Message Store",
+      description: "KahaDB journal과 page file 구성이 확인되었습니다.",
+    };
+  }
+
   const hasJournal = paths.some((path) => /(?:^|\/)journal\/(?:data-\d+|data-control)$/.test(path));
   const hasKaha = paths.some((path) => path.includes("kr-store/data/"));
   if (hasJournal && hasKaha) {
@@ -147,6 +155,20 @@ export async function scanDirectory({ signature, directoryName, files }, emit = 
   for (const entry of files) {
     if (/(?:^|\/)db-\d+\.log$/i.test(entry.relativePath)) {
       structuredJournals.push(await parseKahaDbJournalFile(entry.file, entry.relativePath));
+    }
+  }
+
+  for (const journal of structuredJournals) {
+    for (const record of journal.records) {
+      if (!record.destination) continue;
+      addDestination(destinationMap, {
+        type: record.destination.type,
+        name: record.destination.name,
+        decodedName: record.destination.name,
+        rawName: record.destination.name,
+        source: record.file,
+        confidence: "Parsed",
+      });
     }
   }
 

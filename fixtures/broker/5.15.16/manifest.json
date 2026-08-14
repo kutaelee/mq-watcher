@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "BrokerFixtureProducer",
+  "activeMqVersion": "5.15.16",
+  "requiredJavaMajor": 8,
+  "javaRuntime": "openjdk version \"1.8.0_502\"",
+  "artifact": {
+    "url": "https://repo.maven.apache.org/maven2/org/apache/activemq/activemq-all/5.15.16/activemq-all-5.15.16.jar",
+    "sha1": "dfc7fcf2848af37ffc2f0e4bb5273ea4724f1239",
+    "sha256": "211e6b65d0b4ee636e29bfaeff20f3e6e519afe59a3f85b845166c33ea09eeec"
+  },
+  "runtimeDependencies": [],
+  "broker": {
+    "persistent": true,
+    "adapter": "KahaDB",
+    "connector": "tcp://127.0.0.1:0",
+    "journalMaxFileLength": 1048576,
+    "preallocationScope": "entire_journal"
+  },
+  "scenarios": [
+    "persistent queue message",
+    "acknowledged queue message",
+    "committed local transaction",
+    "offline durable topic message"
+  ],
+  "files": [
+    {
+      "path": "db-1.log",
+      "size": 1048576,
+      "sha256": "632bc8b552493e6efb450aa977de0f05cc3e6e0e363ef9e924d6611567c1f2cd"
+    },
+    {
+      "path": "db.data",
+      "size": 110592,
+      "sha256": "4e58f56c889781bbeac363099cb325a602309e1964ae4f986ec32f995d130030"
+    },
+    {
+      "path": "db.redo",
+      "size": 110800,
+      "sha256": "7ffa354b743d4c629f5d8d8e24f6878b498663d6a7e25d77abfc737d3b1dee8f"
+    }
+  ]
+}
