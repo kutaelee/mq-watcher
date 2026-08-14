@@ -64,6 +64,90 @@ export type MessageCandidate = {
   hex: string;
 };
 
+export type StructuredRecord = {
+  file: string;
+  location: { dataFileId: number; offset: number; size: number };
+  recordType: number;
+  commandType?: number;
+  command: string;
+  status: "Parsed" | "Partial" | "Unsupported" | "Unknown";
+  confidence: Confidence;
+  destination?: { type: string; name: string };
+  messageId?: string;
+  subscriptionKey?: string;
+  transactionId?: string;
+  warning?: string;
+};
+
+export type StructuredJournalResult = {
+  parser: string;
+  scope: string;
+  status: "Parsed" | "Partial" | "Unsupported" | "Unknown";
+  confidence: Confidence;
+  journals: Array<{
+    file: string;
+    fileId: number | null;
+    format: string;
+    status: "Parsed" | "Partial" | "Unsupported" | "Unknown";
+    confidence: Confidence;
+    batches: Array<{
+      offset: number;
+      payloadSize: number;
+      expectedChecksum: string;
+      actualChecksum: string;
+      checksum: "Valid" | "Invalid" | "Not present";
+      status: "Parsed" | "Partial";
+      confidence: "Parsed";
+    }>;
+    records: StructuredRecord[];
+    warnings: string[];
+    truncated: boolean;
+  }>;
+  records: StructuredRecord[];
+  warnings: string[];
+  truncated: boolean;
+};
+
+export type EvidenceRef = {
+  id: string;
+  kind: "source-file" | "parsed-record" | "raw-string" | "message-candidate" | "subscription-candidate";
+  file: string;
+  offset: number | null;
+  recordId?: string;
+  rawId?: string;
+  messageId?: string;
+  subscriptionId?: string;
+  label: string;
+  confidence: Confidence;
+};
+
+export type EvidenceLink = {
+  id: string;
+  kind: "message" | "subscription" | "transaction" | "advisory";
+  primaryId: string;
+  destination: string;
+  destinationType: string;
+  journal: string;
+  offset: number | null;
+  ackStatus: "Observed" | "Not observed" | "Unknown";
+  interpretation: string;
+  interpretationCode?: "ack.observed" | "ack.notObserved" | "subscription.parsed" | "subscription.pattern" | "transaction.commit" | "transaction.rollback" | "transaction.notObserved" | "advisory.parsed" | "advisory.pattern";
+  transactionId: string;
+  confidence: Confidence;
+  evidenceRefs: EvidenceRef[];
+};
+
+export type EvidenceCorrelationResult = {
+  links: EvidenceLink[];
+  counts: {
+    messages: number;
+    subscriptions: number;
+    transactions: number;
+    advisories: number;
+  };
+  warnings: string[];
+};
+
 export type ScanResult = {
   signature: string;
   directoryName: string;
@@ -73,6 +157,8 @@ export type ScanResult = {
   destinations: DestinationRecord[];
   subscriptions: SubscriptionRecord[];
   messages: MessageCandidate[];
+  structured: StructuredJournalResult;
+  correlation: EvidenceCorrelationResult;
   strings: StringHit[];
   totals: {
     bytes: number;
@@ -110,4 +196,3 @@ export type FileInput = {
   relativePath: string;
   file: File;
 };
-

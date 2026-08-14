@@ -1,0 +1,61 @@
+{
+  "storeType": "AMQ Message Store",
+  "files": [
+    {
+      "path": "journal/data-1",
+      "size": 54,
+      "kind": "journal",
+      "confidence": "Observed"
+    },
+    {
+      "path": "kr-store/data/hash-index-queue-data_queue#3a#2f#2fORDERS",
+      "size": 28,
+      "kind": "index",
+      "confidence": "Observed"
+    }
+  ],
+  "destinations": [
+    {
+      "type": "Queue",
+      "name": "ORDERS",
+      "source": "kr-store/data/hash-index-queue-data_queue#3a#2f#2fORDERS",
+      "occurrences": 2,
+      "confidence": "Parsed"
+    }
+  ],
+  "subscriptions": [],
+  "messageCandidates": [],
+  "messageIds": [],
+  "offsets": [],
+  "structured": {
+    "status": "Unknown",
+    "confidence": "Unknown",
+    "records": [],
+    "warnings": [],
+    "truncated": false
+  },
+  "correlation": {
+    "links": [],
+    "counts": {
+      "messages": 0,
+      "subscriptions": 0,
+      "transactions": 0,
+      "advisories": 0
+    },
+    "warnings": [
+      "Correlations describe relationships found in the scanned evidence; they do not identify an outage cause.",
+      "A record not found in the scanned evidence is not proof that the event never occurred."
+    ]
+  },
+  "totals": {
+    "bytes": 82,
+    "journalFiles": 1,
+    "advisoryRecords": 0,
+    "scannedBytes": 82
+  },
+  "warnings": [],
+  "truncated": {
+    "messages": false,
+    "strings": false
+  }
+}

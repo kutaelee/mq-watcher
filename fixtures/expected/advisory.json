@@ -1,0 +1,143 @@
+{
+  "storeType": "Temporary Message Store",
+  "files": [
+    {
+      "path": "db-1.log",
+      "size": 84,
+      "kind": "journal",
+      "confidence": "Observed"
+    },
+    {
+      "path": "tmpdb.data",
+      "size": 4,
+      "kind": "data",
+      "confidence": "Observed"
+    },
+    {
+      "path": "tmpdb.redo",
+      "size": 4,
+      "kind": "data",
+      "confidence": "Observed"
+    }
+  ],
+  "destinations": [
+    {
+      "type": "Topic",
+      "name": "ActiveMQ.Advisory.TempQueue",
+      "source": "db-1.log",
+      "occurrences": 1,
+      "confidence": "Observed"
+    }
+  ],
+  "subscriptions": [],
+  "messageCandidates": [
+    {
+      "id": "db-1.log:0:advisory",
+      "journal": "db-1.log",
+      "offset": 0,
+      "destination": "ActiveMQ.Advisory.TempQueue",
+      "detectedType": "DestinationInfo",
+      "relatedId": "ID:MESSAGE:advisory:001",
+      "operation": "CREATE",
+      "confidence": "Observed"
+    }
+  ],
+  "messageIds": [
+    "ID:MESSAGE:advisory:001"
+  ],
+  "offsets": [
+    {
+      "id": "db-1.log:0:advisory",
+      "offset": 0
+    }
+  ],
+  "structured": {
+    "status": "Unknown",
+    "confidence": "Unknown",
+    "records": [],
+    "warnings": [
+      "db-1.log: No valid KahaDB batch header at offset 0."
+    ],
+    "truncated": false
+  },
+  "correlation": {
+    "links": [
+      {
+        "id": "advisory-candidate:db-1.log:0:advisory",
+        "kind": "advisory",
+        "primaryId": "ID:MESSAGE:advisory:001",
+        "destination": "ActiveMQ.Advisory.TempQueue",
+        "journal": "db-1.log",
+        "offset": 0,
+        "ackStatus": "Unknown",
+        "transactionId": "Unknown",
+        "confidence": "Observed",
+        "evidenceRefs": [
+          {
+            "id": "file:db-1.log",
+            "kind": "source-file",
+            "file": "db-1.log",
+            "offset": null,
+            "confidence": "Observed"
+          },
+          {
+            "id": "message-candidate:db-1.log:0:advisory",
+            "kind": "message-candidate",
+            "file": "db-1.log",
+            "offset": 0,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:0",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 0,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:28",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 28,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:44",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 44,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:60",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 60,
+            "confidence": "Observed"
+          }
+        ]
+      }
+    ],
+    "counts": {
+      "messages": 0,
+      "subscriptions": 0,
+      "transactions": 0,
+      "advisories": 1
+    },
+    "warnings": [
+      "Correlations describe relationships found in the scanned evidence; they do not identify an outage cause.",
+      "A record not found in the scanned evidence is not proof that the event never occurred."
+    ]
+  },
+  "totals": {
+    "bytes": 92,
+    "journalFiles": 1,
+    "advisoryRecords": 1,
+    "scannedBytes": 92
+  },
+  "warnings": [],
+  "truncated": {
+    "messages": false,
+    "strings": false
+  }
+}

@@ -1,4 +1,6 @@
 /* Read-only binary scanner. It never receives writable handles. */
+import { parseKahaDbJournalFile, summarizeStructuredJournals } from "./kahadb-journal-parser.js";
+import { correlateEvidence } from "./evidence-correlation.js";
 const CHUNK_SIZE = 4 * 1024 * 1024;
 const MAX_STRINGS = 6000;
 const MAX_MESSAGES = 2500;
@@ -140,6 +142,13 @@ export async function scanDirectory({ signature, directoryName, files }, emit = 
   const subscriptionMap = new Map();
   const stringHits = [];
   const messages = [];
+  const structuredJournals = [];
+
+  for (const entry of files) {
+    if (/(?:^|\/)db-\d+\.log$/i.test(entry.relativePath)) {
+      structuredJournals.push(await parseKahaDbJournalFile(entry.file, entry.relativePath));
+    }
+  }
 
   for (const entry of files) {
     const parsed = destinationFromFile(entry.relativePath);
@@ -249,7 +258,7 @@ export async function scanDirectory({ signature, directoryName, files }, emit = 
           existing.occurrences += 1;
           if (isTopic) {
             existing.type = "TopicSubscription";
-            existing.confidence = "Parsed";
+            existing.confidence = "Pattern Match";
           }
         } else {
           subscriptionMap.set(rawId, {
@@ -263,7 +272,7 @@ export async function scanDirectory({ signature, directoryName, files }, emit = 
             relatedDestination:
               offset - recentDestinationOffset <= 8192 ? recentDestination : "Unknown",
             occurrences: 1,
-            confidence: isTopic ? "Parsed" : "Pattern Match",
+            confidence: "Pattern Match",
           });
         }
       }
@@ -327,6 +336,13 @@ export async function scanDirectory({ signature, directoryName, files }, emit = 
     }
   }
 
+  const structured = summarizeStructuredJournals(structuredJournals);
+  const correlation = correlateEvidence({
+    structured,
+    messages,
+    subscriptions: Array.from(subscriptionMap.values()),
+    strings: stringHits,
+  });
   const warnings = [];
   if (stringsTruncated) warnings.push(`문자열 목록은 ${MAX_STRINGS.toLocaleString()}건까지만 보관했습니다.`);
   if (messagesTruncated) warnings.push(`메시지 후보는 ${MAX_MESSAGES.toLocaleString()}건까지만 보관했습니다.`);
@@ -347,6 +363,8 @@ export async function scanDirectory({ signature, directoryName, files }, emit = 
       (a, b) => b.occurrences - a.occurrences,
     ),
     messages,
+    structured,
+    correlation,
     strings: stringHits,
     totals: {
       bytes: totalBytes,

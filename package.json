@@ -1,7 +1,30 @@
 {
   "name": "mq-watcher",
   "version": "0.1.0",
-  "private": true,
+  "description": "Local read-only ActiveMQ Classic store evidence explorer",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kutaelee/mq-watcher.git"
+  },
+  "homepage": "https://github.com/kutaelee/mq-watcher#readme",
+  "bugs": "https://github.com/kutaelee/mq-watcher/issues",
+  "keywords": [
+    "activemq",
+    "kahadb",
+    "forensics",
+    "jms",
+    "message-broker"
+  ],
+  "bin": {
+    "mq-watcher": "bin/mq-watcher.mjs"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
   "engines": {
     "node": ">=22.13.0"
   },
@@ -9,9 +32,12 @@
     "dev": "vinext dev",
     "build": "vinext build",
     "start": "vinext start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "test:fixtures": "node --test tests/fixtures.test.mjs",
+    "fixtures:generate": "node scripts/generate-synthetic-fixtures.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "validate:store": "node scripts/validate-store.mjs"
+    "validate:store": "node scripts/validate-store.mjs",
+    "prepack": "npm run build"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.23",
