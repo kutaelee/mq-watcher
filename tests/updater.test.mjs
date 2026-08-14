@@ -357,9 +357,11 @@ test("generated replacement helper smoke-checks the new version and rolls back b
   assert.match(helper, /\$reportedVersion\.Trim\(\) -ne \$expectedVersion/);
   assert.match(helper, /\[System\.IO\.File\]::Replace\(\$backup, \$target, \$failed, \$true\)/);
   assert.match(helper, /\$rolledBack -or \(-not \$replaced/);
+  assert.match(helper, /Start-Process -FilePath \$target -PassThru/);
+  assert.match(helper, /\$restartProcess\.WaitForExit\(1000\)/);
   assert.match(helper, /Remove-Item -LiteralPath \$staged -Force/);
   assert.ok(helper.indexOf("try {") < helper.indexOf("Staged update checksum mismatch"));
-  assert.ok(helper.indexOf("$reportedVersion") < helper.indexOf("Start-Process -FilePath $target"));
+  assert.ok(helper.indexOf("$reportedVersion") < helper.indexOf("  Start-Target"));
   assert.equal(scheduled, true);
   assert.deepEqual(await readFile(current), oldBinary);
 });
@@ -395,8 +397,8 @@ test("real Windows helper replaces, version-checks, restarts, and cleans a comma
     helper.ref();
     dummy.kill();
     await helperDone;
-    await waitFor(async () => (await readdir(root)).includes("new-restart.marker"));
     assert.equal(helper.exitCode, 0);
+    assert.equal((await readdir(root)).includes("new-restart.marker"), true, "the helper must not exit before a fast restarted target completes");
     assert.equal(await readFile(current, "utf8"), newScript);
     assert.deepEqual((await readdir(root)).sort(), ["mq-watcher.cmd", "new-restart.marker"]);
   } finally {
