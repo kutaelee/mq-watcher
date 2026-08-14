@@ -368,6 +368,19 @@ function ExplorerApp() {
     }
   };
 
+  const loadDemo = async () => {
+    setError("");
+    try {
+      const response = await fetch("/demo-result.json", { cache: "no-store" });
+      if (!response.ok) throw new Error(t("error.demo"));
+      setResult(await response.json() as ScanResult);
+      setActiveView("overview");
+      setSelected(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    }
+  };
+
   const selectItem = (item: Selected) => {
     setSelected(item);
     setDetailOpen(true);
@@ -480,7 +493,7 @@ function ExplorerApp() {
 
           {error ? <div className="error-alert"><AlertCircle size={18} /><div><strong>{t("error.title")}</strong><p>{error}</p></div></div> : null}
           {isPreparing || isScanning ? <ScanProgress progress={progress} percentage={percentage} preparing={isPreparing} onCancel={() => workerRef.current?.postMessage({ type: "cancel" })} /> : null}
-          {!result && !isScanning && !isPreparing ? <EmptyExplorer onOpen={openDirectory} /> : null}
+          {!result && !isScanning && !isPreparing ? <EmptyExplorer onOpen={openDirectory} onDemo={loadDemo} /> : null}
 
           {result && !isScanning ? (
             <>
@@ -516,7 +529,7 @@ function MetricCard({ label, value, sub, icon: Icon, help, onHelp }: { label: st
   return <Card className="metric-card"><div className="metric-head"><span className="metric-icon"><Icon size={17} /></span><span className="metric-label">{label}</span>{help ? <HelpButton help={help} onHelp={onHelp} /> : null}</div><div className="metric-value">{value}</div><p>{sub}</p></Card>;
 }
 
-function EmptyExplorer({ onOpen }: { onOpen: () => void }) {
+function EmptyExplorer({ onOpen, onDemo }: { onOpen: () => void; onDemo: () => void }) {
   const { t } = useI18n();
   return (
     <div className="empty-layout">
@@ -524,7 +537,7 @@ function EmptyExplorer({ onOpen }: { onOpen: () => void }) {
         <div className="empty-icon"><FolderOpen size={30} /></div>
         <Badge tone="green"><ShieldCheck size={13} /> {t("empty.readOnly")}</Badge>
         <h2>{t("empty.title")}</h2><p>{t("empty.body")}</p>
-        <Button onClick={onOpen}><FolderOpen size={16} /> {t("empty.select")}</Button>
+        <div className="empty-actions"><Button onClick={onOpen}><FolderOpen size={16} /> {t("empty.select")}</Button><Button variant="secondary" onClick={onDemo}><ListTree size={16} /> {t("empty.demo")}</Button></div>
         <div className="empty-support"><span><Database size={15} /> {t("empty.persistent")}</span><span><FileArchive size={15} /> {t("empty.temp")}</span><span><Binary size={15} /> {t("empty.raw")}</span></div>
       </Card>
       <div className="principle-grid">
@@ -545,6 +558,7 @@ function Overview({ result, help, onHelp, onNavigate, onSelect }: { result: Scan
   const { t, locale } = useI18n();
   const store = displayStore(result, t);
   const warnings = [
+    result.signature === "synthetic-demo-v1" ? t("warning.demo") : "",
     result.truncated.strings ? t("warning.strings", { count: 6000 }) : "",
     result.truncated.messages ? t("warning.messages", { count: 2500 }) : "",
     result.storeKind === "Unknown Store Layout" ? t("warning.unknownStore") : "",
@@ -772,7 +786,7 @@ function resolveEvidenceRef(ref: EvidenceRef, result: ScanResult | null): Select
 function CorrelationDetail({ value, result, onSelect }: { value: EvidenceLink; result: ScanResult | null; onSelect: (item: Selected) => void }) {
   const { t } = useI18n();
   const file = result?.files.find((item) => item.path === value.journal);
-  return <div className="detail-body"><div className="detail-badges"><Badge tone={value.kind === "advisory" ? "violet" : "blue"}>{evidenceKind(value.kind, t)}</Badge><ConfidenceBadge confidence={value.confidence} /></div><div className="best-effort"><Info size={15} /><span>{t("evidence.limit")}</span></div><DetailSection title={t("detail.evidenceLink")}><DetailField label={t("table.relatedId")} value={value.primaryId} mono copy /><DetailField label={t("table.destination")} value={value.destination} mono copy /><DetailField label={t("table.journal")} value={file ? <button className="text-link" onClick={() => onSelect({ type: "file", value: file })}>{value.journal}</button> : value.journal} mono /><DetailField label={t("table.offset")} value={value.offset === null ? t("type.unknown") : formatOffset(value.offset)} mono /><DetailField label={t("detail.ackStatus")} value={t(`evidence.ack.${value.ackStatus}`)} /><DetailField label={t("detail.transaction")} value={value.transactionId} mono /></DetailSection><DetailSection title={t("detail.interpretation")}><p className="tab-note">{value.interpretation}</p></DetailSection><DetailSection title={t("detail.evidenceRefs")}><div className="related-list">{value.evidenceRefs.map((ref) => { const target = resolveEvidenceRef(ref, result); return <button key={ref.id} disabled={!target} onClick={() => target && onSelect(target)}><span>{ref.kind}</span><small>{ref.file}{ref.offset === null ? "" : ` · ${formatOffset(ref.offset)}`}</small><ConfidenceBadge confidence={ref.confidence} /><ChevronRight size={14} /></button>; })}</div></DetailSection></div>;
+  return <div className="detail-body"><div className="detail-badges"><Badge tone={value.kind === "advisory" ? "violet" : "blue"}>{evidenceKind(value.kind, t)}</Badge><ConfidenceBadge confidence={value.confidence} /></div><div className="best-effort"><Info size={15} /><span>{t("evidence.limit")}</span></div><DetailSection title={t("detail.evidenceLink")}><DetailField label={t("table.relatedId")} value={value.primaryId} mono copy /><DetailField label={t("table.destination")} value={value.destination} mono copy /><DetailField label={t("table.journal")} value={file ? <button className="text-link" onClick={() => onSelect({ type: "file", value: file })}>{value.journal}</button> : value.journal} mono /><DetailField label={t("table.offset")} value={value.offset === null ? t("type.unknown") : formatOffset(value.offset)} mono /><DetailField label={t("detail.ackStatus")} value={t(`evidence.ack.${value.ackStatus}`)} /><DetailField label={t("detail.transaction")} value={value.transactionId} mono /></DetailSection><DetailSection title={t("detail.interpretation")}><p className="tab-note">{value.interpretationCode ? t(`evidence.interpretation.${value.interpretationCode}`) : value.interpretation}</p></DetailSection><DetailSection title={t("detail.evidenceRefs")}><div className="related-list">{value.evidenceRefs.map((ref) => { const target = resolveEvidenceRef(ref, result); return <button key={ref.id} disabled={!target} onClick={() => target && onSelect(target)}><span>{ref.kind}</span><small>{ref.file}{ref.offset === null ? "" : ` · ${formatOffset(ref.offset)}`}</small><ConfidenceBadge confidence={ref.confidence} /><ChevronRight size={14} /></button>; })}</div></DetailSection></div>;
 }
 
 function StructuredRecordDetail({ value, result, onSelect }: { value: StructuredRecord; result: ScanResult | null; onSelect: (item: Selected) => void }) {

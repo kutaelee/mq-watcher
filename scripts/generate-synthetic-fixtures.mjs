@@ -228,4 +228,15 @@ for (const fixtureName of fixtureNames) {
   );
 }
 
+const demoScan = await scanPath(path.join(fixtureRoot, "kahadb-framing"));
+await writeFile(
+  path.join(repositoryRoot, "public", "demo-result.json"),
+  `${JSON.stringify({
+    ...demoScan.result,
+    signature: "synthetic-demo-v1",
+    directoryName: "synthetic-kahadb-demo",
+    scannedAt: "2026-01-01T00:00:00.000Z",
+  }, null, 2)}\n`,
+);
+
 process.stdout.write(`Generated synthetic fixtures and golden results in ${fixtureRoot}\n`);

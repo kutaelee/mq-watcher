@@ -48,8 +48,33 @@ test("ships the bounded worker scanner, localized UI, and sortable tables", asyn
   assert.match(explorer, /pageSize/);
   assert.match(explorer, /EvidenceView/);
   assert.match(explorer, /resolveEvidenceRef/);
+  assert.match(explorer, /demo-result\.json/);
   assert.doesNotMatch(explorer, /InvestigationView|ClassesView|mobile-menu/);
   assert.match(layout, /<html lang="ko">/);
   await access(new URL("../public/store-scanner.worker.js", import.meta.url));
+  await access(new URL("../public/demo-result.json", import.meta.url));
   await assert.rejects(access(new URL("../app/_sites-preview", import.meta.url)));
+});
+
+test("ships OSS safety guidance and synthetic-only documentation assets", async () => {
+  const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
+  const security = await readFile(new URL("../SECURITY.md", import.meta.url), "utf8");
+  const contributing = await readFile(new URL("../CONTRIBUTING.md", import.meta.url), "utf8");
+  const demo = JSON.parse(
+    await readFile(new URL("../public/demo-result.json", import.meta.url), "utf8"),
+  );
+
+  assert.match(
+    readme,
+    /No broker startup\. No store recovery\. No writes\. No uploads\. Evidence first\./,
+  );
+  assert.match(readme, /runtime \*\*Not verified\*\*/);
+  assert.match(security, /IndexedDB/);
+  assert.match(contributing, /Read-only invariant/);
+  assert.equal(demo.directoryName, "synthetic-kahadb-demo");
+  assert.equal(demo.signature, "synthetic-demo-v1");
+
+  for (const name of ["overview.png", "evidence-links.png", "evidence-detail.png"]) {
+    await access(new URL(`../docs/screenshots/${name}`, import.meta.url));
+  }
 });

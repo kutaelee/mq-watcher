@@ -237,6 +237,18 @@ const messages: Record<Locale, Record<string, string>> = {
     ,"detail.value": "값"
     ,"help.correlation.title": "증거 연결"
     ,"help.correlation.body": "동일한 메시지 ID, 목적지, 트랜잭션 ID 및 레코드 위치를 기준으로 연결합니다. 레코드가 보이지 않는다는 사실만으로 해당 사건이 없었다고 판단하지 않습니다."
+    ,"empty.demo": "합성 예시 보기"
+    ,"warning.demo": "현재 화면은 공개 가능한 합성 fixture 결과입니다. 실제 broker 생성 저장소의 호환성 증거가 아닙니다."
+    ,"error.demo": "합성 예시를 불러오지 못했습니다."
+    ,"evidence.interpretation.ack.observed": "스캔한 저널 증거에서 동일한 메시지 ID와 목적지를 가진 remove/ACK 명령을 확인했습니다."
+    ,"evidence.interpretation.ack.notObserved": "스캔한 증거에서 동일한 remove/ACK 명령을 찾지 못했습니다. 이것만으로 메시지가 처리되지 않았다고 단정할 수 없습니다."
+    ,"evidence.interpretation.subscription.parsed": "하나의 구조화 구독 레코드에서 구독 키와 목적지를 함께 해석했습니다."
+    ,"evidence.interpretation.subscription.pattern": "주변 원문 문자열을 바탕으로 연결한 후보이며 별도 확인이 필요합니다."
+    ,"evidence.interpretation.transaction.commit": "이 트랜잭션의 commit 명령을 확인했습니다."
+    ,"evidence.interpretation.transaction.rollback": "이 트랜잭션의 rollback 명령을 확인했습니다."
+    ,"evidence.interpretation.transaction.notObserved": "commit 또는 rollback 명령을 찾지 못했습니다. 이것만으로 트랜잭션이 미완료라고 단정할 수 없습니다."
+    ,"evidence.interpretation.advisory.parsed": "구조화 add-message 명령의 목적지가 Advisory임을 확인했습니다. OpenWire 본문은 해석하지 않습니다."
+    ,"evidence.interpretation.advisory.pattern": "원문 문자열과 제한된 HEX 미리보기에 따른 Advisory 후보이며 구조화 명령 해석 결과가 아닙니다."
   },
   en: {
     "brand.subtitle": "STORE EVIDENCE EXPLORER",
@@ -381,6 +393,18 @@ const messages: Record<Locale, Record<string, string>> = {
     ,"detail.value": "Value"
     ,"help.correlation.title": "Evidence correlation"
     ,"help.correlation.body": "Links use matching message IDs, destinations, transaction IDs, and record locations. A missing record is not treated as proof that an event never occurred."
+    ,"empty.demo": "Load synthetic demo"
+    ,"warning.demo": "This view uses a public synthetic fixture result. It is not compatibility proof for a broker-generated store."
+    ,"error.demo": "Could not load the synthetic demo."
+    ,"evidence.interpretation.ack.observed": "A matching remove/ACK command was observed for the same message ID and destination."
+    ,"evidence.interpretation.ack.notObserved": "No matching remove/ACK command was found in the scanned evidence. This alone does not prove that the message was never acknowledged."
+    ,"evidence.interpretation.subscription.parsed": "The subscription key and destination were decoded from the same structured record."
+    ,"evidence.interpretation.subscription.pattern": "This candidate relation is based on nearby raw strings and requires independent confirmation."
+    ,"evidence.interpretation.transaction.commit": "A commit command was observed for this transaction."
+    ,"evidence.interpretation.transaction.rollback": "A rollback command was observed for this transaction."
+    ,"evidence.interpretation.transaction.notObserved": "No commit or rollback command was found. This alone does not prove that the transaction remained incomplete."
+    ,"evidence.interpretation.advisory.parsed": "A structured add-message command targets an Advisory destination. The OpenWire body is not decoded."
+    ,"evidence.interpretation.advisory.pattern": "This Advisory candidate comes from raw strings and a bounded HEX preview, not a decoded command."
   }
 };
 

@@ -358,6 +358,7 @@ tbody tr:last-child td { border-bottom: 0; }
 .related-list span { color: var(--primary-strong); font: 600 9px var(--font-geist-mono), monospace; }
 .related-list small { min-width: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .text-link { color: var(--primary-strong); text-decoration: underline; text-underline-offset: 2px; }
+.empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .detail-tabs [role="tablist"] { display: grid; grid-template-columns: repeat(4, 1fr); padding: 3px; border-radius: 8px; background: var(--panel-soft); }
 .detail-tabs [role="tab"] { height: 29px; padding: 0 4px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 9px; font-weight: 700; cursor: pointer; }
 .detail-tabs [role="tab"][data-state="active"] { background: var(--panel); color: var(--primary-strong); box-shadow: 0 1px 5px rgba(27, 39, 64, .1); }

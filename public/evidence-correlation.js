@@ -83,6 +83,7 @@ export function correlateEvidence({ structured, messages, subscriptions, strings
       interpretation: ack
         ? "A matching remove/ack command was observed in the scanned journal evidence."
         : "A matching remove/ack command was not found in the scanned evidence. This does not prove that the message was never acknowledged.",
+      interpretationCode: ack ? "ack.observed" : "ack.notObserved",
       transactionId: record.transactionId || "Unknown",
       confidence: "Parsed",
       evidenceRefs,
@@ -101,6 +102,7 @@ export function correlateEvidence({ structured, messages, subscriptions, strings
       offset: record.location.offset,
       ackStatus: "Unknown",
       interpretation: "The subscription command and destination were decoded from the same structured record.",
+      interpretationCode: "subscription.parsed",
       transactionId: "Unknown",
       confidence: "Parsed",
       evidenceRefs: uniqueRefs([sourceFileRef(record.file), parsedRef(record), ...nearbyRawRefs(record, strings)]),
@@ -116,6 +118,7 @@ export function correlateEvidence({ structured, messages, subscriptions, strings
     offset: null,
     ackStatus: "Unknown",
     interpretation: "This relation is based on nearby printable-string evidence and requires independent confirmation.",
+    interpretationCode: "subscription.pattern",
     transactionId: "Unknown",
     confidence: subscription.confidence,
     evidenceRefs: [
@@ -154,6 +157,9 @@ export function correlateEvidence({ structured, messages, subscriptions, strings
       interpretation: terminal
         ? `${terminal.command === "KAHA_COMMIT_COMMAND" ? "Commit" : "Rollback"} command observed for this transaction.`
         : "No commit or rollback command was found in the scanned evidence. This does not prove that the transaction remained incomplete.",
+      interpretationCode: terminal
+        ? terminal.command === "KAHA_COMMIT_COMMAND" ? "transaction.commit" : "transaction.rollback"
+        : "transaction.notObserved",
       transactionId,
       confidence: "Parsed",
       evidenceRefs: uniqueRefs(group.flatMap((record) => [sourceFileRef(record.file), parsedRef(record), ...nearbyRawRefs(record, strings)])),
@@ -167,6 +173,7 @@ export function correlateEvidence({ structured, messages, subscriptions, strings
       id: `advisory:${link.journal}:${link.offset}`,
       kind: "advisory",
       interpretation: "A structured add-message command targets an Advisory destination. The OpenWire body is not decoded.",
+      interpretationCode: "advisory.parsed",
     }));
   const heuristicAdvisories = messages
     .filter((message) => /\.Advisory\./.test(message.destination))
@@ -180,6 +187,7 @@ export function correlateEvidence({ structured, messages, subscriptions, strings
       offset: message.offset,
       ackStatus: "Unknown",
       interpretation: "This Advisory relation comes from printable strings and a bounded hex preview, not a decoded KahaDB command.",
+      interpretationCode: "advisory.pattern",
       transactionId: "Unknown",
       confidence: message.confidence,
       evidenceRefs: uniqueRefs([

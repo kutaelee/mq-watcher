@@ -131,6 +131,7 @@ export type EvidenceLink = {
   offset: number | null;
   ackStatus: "Observed" | "Not observed" | "Unknown";
   interpretation: string;
+  interpretationCode?: "ack.observed" | "ack.notObserved" | "subscription.parsed" | "subscription.pattern" | "transaction.commit" | "transaction.rollback" | "transaction.notObserved" | "advisory.parsed" | "advisory.pattern";
   transactionId: string;
   confidence: Confidence;
   evidenceRefs: EvidenceRef[];
