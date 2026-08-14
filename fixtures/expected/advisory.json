@@ -1,0 +1,29 @@
+{
+  "storeType": "Temporary Message Store",
+  "files": [
+    { "path": "db-1.log", "size": 84, "kind": "journal", "confidence": "Observed" },
+    { "path": "tmpdb.data", "size": 4, "kind": "data", "confidence": "Observed" },
+    { "path": "tmpdb.redo", "size": 4, "kind": "data", "confidence": "Observed" }
+  ],
+  "destinations": [
+    { "type": "Topic", "name": "ActiveMQ.Advisory.TempQueue", "source": "db-1.log", "occurrences": 1, "confidence": "Observed" }
+  ],
+  "subscriptions": [],
+  "messageCandidates": [
+    {
+      "id": "db-1.log:0:advisory",
+      "journal": "db-1.log",
+      "offset": 0,
+      "destination": "ActiveMQ.Advisory.TempQueue",
+      "detectedType": "DestinationInfo",
+      "relatedId": "ID:MESSAGE:advisory:001",
+      "operation": "CREATE",
+      "confidence": "Observed"
+    }
+  ],
+  "messageIds": ["ID:MESSAGE:advisory:001"],
+  "offsets": [{ "id": "db-1.log:0:advisory", "offset": 0 }],
+  "totals": { "bytes": 92, "journalFiles": 1, "advisoryRecords": 1, "scannedBytes": 92 },
+  "warnings": [],
+  "truncated": { "messages": false, "strings": false }
+}

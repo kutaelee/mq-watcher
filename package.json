@@ -9,7 +9,9 @@
     "dev": "vinext dev",
     "build": "vinext build",
     "start": "vinext start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "test:fixtures": "node --test tests/fixtures.test.mjs",
+    "fixtures:generate": "node scripts/generate-synthetic-fixtures.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "validate:store": "node scripts/validate-store.mjs"
   },
