@@ -129,8 +129,10 @@ test("download click failure revokes the newly created object URL", () => {
 
 test("production export uses a neutral download filename", async () => {
   const source = await readFile(new URL("../app/components/export/EvidenceExport.tsx", import.meta.url), "utf8");
+  const explorerSource = await readFile(new URL("../app/components/StoreExplorer.tsx", import.meta.url), "utf8");
   assert.match(source, /filename:\s*"mq-watcher-evidence-bundle\.zip"/);
   assert.doesNotMatch(source, /filename:\s*result\.directoryName|download\s*=.*directoryName/);
+  assert.match(explorerSource, /<EvidenceExport\s+key=\{result\.signature\}/, "switching Stores must remount export and dispose the previous Worker lifecycle");
 });
 
 test("five thousand uniquely redacted records complete within the regression budget", async () => {

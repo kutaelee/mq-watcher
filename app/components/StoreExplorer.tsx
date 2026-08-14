@@ -687,7 +687,7 @@ function ExplorerApp() {
               {activeView === "case" ? <IncidentCase result={result} openResults={sessions.flatMap((session) => session.result ? [session.result] : [])} pinCandidate={makePinCandidate(selected, result)} /> : null}
               {activeView === "journals" ? <JournalExplorer result={result} /> : null}
               {activeView === "timeline" ? <EvidenceTimeline result={result} /> : null}
-              {activeView === "export" ? <EvidenceExport result={result} sessions={sessions} /> : null}
+              {activeView === "export" ? <EvidenceExport key={result.signature} result={result} sessions={sessions} /> : null}
               {activeView === "destinations" ? <DestinationsView key={`${result.signature}:destinations`} stateKey={`${result.signature}:destinations`} result={result} help={help} onSelect={selectItem} onHelp={setContextHelp} /> : null}
               {activeView === "subscriptions" ? <SubscriptionsView key={`${result.signature}:subscriptions`} stateKey={`${result.signature}:subscriptions`} result={result} help={help} onSelect={selectItem} onHelp={setContextHelp} /> : null}
               {activeView === "messages" ? <MessagesView key={`${result.signature}:messages`} stateKey={`${result.signature}:messages`} result={result} onSelect={selectItem} /> : null}
