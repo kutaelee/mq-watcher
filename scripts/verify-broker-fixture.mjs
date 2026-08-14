@@ -9,7 +9,7 @@ export const brokerVersions = ["5.13.5", "5.15.16", "5.18.7"];
 
 export function containsWorkstationIdentifier(bytes) {
   const text = Buffer.from(bytes).toString("latin1");
-  return /DESKTOP-|kutae|(?:file:\/+)?[A-Z]:[\\/]Users[\\/][^\\/\p{Cc}]{1,128}[\\/]|\/(?:home|Users)\/[^/\p{Cc}]{1,128}\//iu.test(text);
+  return /DESKTOP-|(?:file:\/+)?[A-Z]:[\\/]Users[\\/][^\\/\p{Cc}]{1,128}[\\/]|\/(?:home|Users)\/[^/\p{Cc}]{1,128}\//iu.test(text);
 }
 
 async function sha256(file) {

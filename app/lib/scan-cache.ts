@@ -70,6 +70,17 @@ export async function writeIncidentCase(value: IncidentCase): Promise<void> {
   });
 }
 
+export async function deleteIncidentCase(id: string): Promise<void> {
+  if (typeof indexedDB === "undefined") return;
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(CASE_STORE, "readwrite");
+    tx.objectStore(CASE_STORE).delete(id);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 export async function readWorkbenchState(): Promise<PersistedWorkbenchState | null> {
   if (typeof indexedDB === "undefined") return null;
   const db = await openDatabase();

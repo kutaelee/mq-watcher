@@ -300,6 +300,21 @@ const addIdempotenceSentinelsExpression = `(${async function addIdempotenceSenti
   const demoResult = await fetch("/demo-result.json", { cache: "no-store" }).then((response) => response.json());
   demoResult.signature = "current-schema-store";
   demoResult.directoryName = "current-schema-demo";
+  demoResult.correlation.links.push(...Array.from({ length: 140 }, (_, index) => ({
+    id: `scenario-link-${index}`,
+    kind: "message",
+    primaryId: `ID:SCENARIO:${index}`,
+    destination: "ORDERS",
+    destinationType: "Queue",
+    journal: "db-1.log",
+    offset: 1000 + index,
+    ackStatus: "Not observed in scanned evidence",
+    interpretation: "Synthetic evidence reference used to verify progressive disclosure.",
+    interpretationCode: "ack.notObserved",
+    transactionId: "Unknown",
+    confidence: "Observed",
+    evidenceRefs: [{ id: `scenario-ref-${index}`, kind: "parsed-record", file: "db-1.log", offset: 1000 + index, label: `ID:SCENARIO:${index}`, confidence: "Observed" }],
+  })));
   const database = await requestResult(indexedDB.open("mq-watcher"));
   const transaction = database.transaction(["scan-results", "workbench-state", "incident-cases"], "readwrite");
   transaction.objectStore("scan-results").put({ signature: "current-schema-scan", marker: "must-survive-reload" });
@@ -382,6 +397,151 @@ const openCaseAndReadUnresolvedExpression = `(${async function openCaseAndReadUn
   throw new Error("the restored foreign evidence reference was not rendered as unresolved");
 }})()`;
 
+const setKoreanLocaleExpression = `(${async function setKoreanLocale() {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const button = Array.from(document.querySelectorAll("button")).find((candidate) => candidate.textContent?.trim() === "한국어");
+    button?.click();
+    if (document.documentElement.lang === "ko" && localStorage.getItem("mq-watcher-locale") === "ko") return true;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error("Korean locale was not applied and persisted");
+}})()`;
+
+const pinEvidenceFromCaseExpression = `(${async function pinEvidenceFromCase() {
+  const deadline = Date.now() + 10_000;
+  const input = document.querySelector(".case-evidence-search input");
+  if (!input) throw new Error("case evidence search is unavailable");
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  setter.call(input, "ORDERS");
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  while (Date.now() < deadline) {
+    const pin = document.querySelector(".case-evidence-candidates button");
+    if (pin) {
+      pin.click();
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  while (Date.now() < deadline) {
+    const text = document.querySelector(".case-pins")?.textContent ?? "";
+    if (text.includes("ORDERS")) return text;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error("case evidence picker did not pin the selected evidence");
+}})()`;
+
+const createAndDeleteCaseExpression = `(${async function createAndDeleteCase() {
+  const requestResult = (request) => new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  const readKeys = async () => {
+    const database = await requestResult(indexedDB.open("mq-watcher"));
+    const keys = await requestResult(database.transaction("incident-cases", "readonly").objectStore("incident-cases").getAllKeys());
+    database.close();
+    return keys;
+  };
+  const before = await readKeys();
+  const create = document.querySelector(".case-list-head button");
+  if (!create) throw new Error("new case action is unavailable");
+  create.click();
+  const deadline = Date.now() + 10_000;
+  let createdId = "";
+  while (Date.now() < deadline) {
+    const afterCreate = await readKeys();
+    createdId = afterCreate.find((key) => !before.includes(key)) ?? "";
+    if (createdId && document.querySelector(".case-editor-actions button")) break;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  if (!createdId) throw new Error("new case was not persisted");
+  window.confirm = () => true;
+  document.querySelector(".case-editor-actions button").click();
+  while (Date.now() < deadline) {
+    if (!(await readKeys()).includes(createdId)) return createdId;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error("deleted case remained in IndexedDB");
+}})()`;
+
+const inspectProgressiveJournalExpression = `(${async function inspectProgressiveJournal() {
+  const deadline = Date.now() + 10_000;
+  const journalButton = () => Array.from(document.querySelectorAll("button")).find((candidate) => /저널 보존 탐색|Journal retention/u.test(candidate.textContent ?? ""));
+  while (Date.now() < deadline && !document.querySelector(".journal-layout")) {
+    journalButton()?.click();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  const before = document.querySelectorAll(".journal-refs > div").length;
+  const loadMore = document.querySelector(".journal-load-more");
+  if (before !== 50 || !loadMore) throw new Error(`expected 50 initial references and a load-more action, received ${before}`);
+  loadMore.click();
+  while (Date.now() < deadline) {
+    const after = document.querySelectorAll(".journal-refs > div").length;
+    if (after > before) return { before, after };
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error("journal references did not continue after user request");
+}})()`;
+
+const closeStoreAndReadToastExpression = `(${async function closeStoreAndReadToast() {
+  const deadline = Date.now() + 10_000;
+  document.querySelector(".store-tab-close")?.click();
+  while (Date.now() < deadline && document.querySelector(".store-tab")) await new Promise((resolve) => setTimeout(resolve, 50));
+  const messages = Array.from(document.querySelectorAll(".nav-item")).find((candidate) => /메시지|Messages/u.test(candidate.textContent ?? ""));
+  if (!messages) throw new Error("messages navigation action is unavailable");
+  messages.click();
+  while (Date.now() < deadline) {
+    const text = document.querySelector(".app-toast")?.textContent ?? "";
+    if (/저장소를 먼저 열어|Open a Store first/u.test(text)) return text;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error("empty navigation did not explain why the view is unavailable");
+}})()`;
+
+const loadSyntheticDemoTwiceExpression = `(${async function loadSyntheticDemoTwice() {
+  const deadline = Date.now() + 10_000;
+  const button = document.querySelector(".empty-actions button:last-child");
+  if (!button) throw new Error("synthetic demo action is unavailable");
+  button.click();
+  button.click();
+  while (Date.now() < deadline) {
+    const tabs = Array.from(document.querySelectorAll('[role="tab"]')).map((tab) => tab.textContent?.replace(/복원됨|restored/gu, "").trim() ?? "");
+    if (tabs.length === 2) {
+      if (new Set(tabs).size !== 2) throw new Error(`duplicate synthetic Store tabs were created: ${tabs.join(", ")}`);
+      return tabs;
+    }
+    if (tabs.length > 2) throw new Error(`double-click opened ${tabs.length} synthetic Store tabs`);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error("synthetic demo did not open exactly two snapshots");
+}})()`;
+
+const inspectJournalStoreIsolationExpression = `(${async function inspectJournalStoreIsolation() {
+  const deadline = Date.now() + 10_000;
+  const clickButton = (pattern) => Array.from(document.querySelectorAll("button")).find((candidate) => pattern.test(candidate.textContent ?? ""))?.click();
+  clickButton(/저널 보존 탐색|Journal retention/u);
+  while (Date.now() < deadline && !document.querySelector(".journal-layout")) await new Promise((resolve) => setTimeout(resolve, 50));
+  Array.from(document.querySelectorAll(".journal-row-select")).find((candidate) => candidate.textContent?.trim() === "db-2.log")?.click();
+  while (Date.now() < deadline && document.querySelectorAll(".journal-refs > div").length !== 50) await new Promise((resolve) => setTimeout(resolve, 50));
+  document.querySelector(".journal-load-more")?.click();
+  while (Date.now() < deadline && document.querySelectorAll(".journal-refs > div").length !== 150) await new Promise((resolve) => setTimeout(resolve, 50));
+  const expanded = document.querySelectorAll(".journal-refs > div").length;
+  const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+  const baseline = tabs.find((tab) => /synthetic-advisory-baseline/u.test(tab.textContent ?? ""));
+  const investigation = tabs.find((tab) => /synthetic-advisory-investigation/u.test(tab.textContent ?? ""));
+  baseline?.click();
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  clickButton(/저널 보존 탐색|Journal retention/u);
+  while (Date.now() < deadline && !document.querySelector(".journal-layout")) await new Promise((resolve) => setTimeout(resolve, 50));
+  investigation?.click();
+  while (Date.now() < deadline) {
+    const reset = document.querySelectorAll(".journal-refs > div").length;
+    if (reset === 19) return { expanded, reset };
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`journal state leaked across Store tabs; expanded=${expanded}, reset=${document.querySelectorAll(".journal-refs > div").length}`);
+}})()`;
+
 function waitForExit(child, timeoutMilliseconds) {
   if (!child || child.exitCode !== null) return Promise.resolve(true);
   return new Promise((resolve) => {
@@ -441,19 +601,24 @@ async function main() {
   let browserOutput = () => "";
   let testError;
   const browserErrors = [];
-  const cleanup = { browserPid: null, browserStopped: false, serverPid: null, serverStopped: false, temporaryRoot, temporaryRootRemoved: false };
+  const cleanup = { browserPid: null, browserStopped: false, serverPid: null, firstServerStopped: false, serverStopped: false, temporaryRoot, temporaryRootRemoved: false };
 
-  try {
-    serverProcess = spawn(process.execPath, [vinextCli, "start", "--port", String(serverPort), "--hostname", "127.0.0.1"], {
+  const launchServer = async () => {
+    const child = spawn(process.execPath, [vinextCli, "start", "--port", String(serverPort), "--hostname", "127.0.0.1"], {
       cwd: REPOSITORY_ROOT,
       env: { ...process.env, NO_COLOR: "1" },
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
       detached: process.platform !== "win32",
     });
+    const output = captureOutput(child);
+    await waitForServer(`${origin}/favicon.svg`, child, output);
+    return { child, output };
+  };
+
+  try {
+    ({ child: serverProcess, output: serverOutput } = await launchServer());
     cleanup.serverPid = serverProcess.pid;
-    serverOutput = captureOutput(serverProcess);
-    await waitForServer(`${origin}/favicon.svg`, serverProcess, serverOutput);
 
     const debugPort = await reserveLoopbackPort();
     const browserArguments = [
@@ -509,6 +674,7 @@ async function main() {
       check();
     })`);
     assert.ok(bodyLength > 100, "the application must render meaningful content");
+    assert.equal(await evaluate(client, "document.documentElement.lang"), "en", "a first-time workspace must start in English");
     const firstReload = await evaluate(client, inspectCurrentDatabaseExpression);
     assertMigratedDatabase(firstReload);
 
@@ -519,6 +685,40 @@ async function main() {
     const caseText = await evaluate(client, openCaseAndReadUnresolvedExpression);
     assert.match(caseText, /현재 미해결|Currently unresolved/u);
     assert.match(caseText, /Foreign unresolved evidence/u);
+    assert.match(await evaluate(client, pinEvidenceFromCaseExpression), /ORDERS/u);
+    assert.equal(typeof await evaluate(client, createAndDeleteCaseExpression), "string");
+    const progressiveJournal = await evaluate(client, inspectProgressiveJournalExpression);
+    assert.deepEqual(progressiveJournal, { before: 50, after: 150 });
+    assert.equal(await evaluate(client, setKoreanLocaleExpression), true);
+
+    cleanup.firstServerStopped = await terminateOwnedProcess(serverProcess);
+    assert.equal(cleanup.firstServerStopped, true, "the first application server must stop before restart");
+    ({ child: serverProcess, output: serverOutput } = await launchServer());
+    cleanup.serverPid = serverProcess.pid;
+    await reload(client);
+    const restoredState = await evaluate(client, `new Promise((resolve, reject) => {
+      const deadline = Date.now() + 10000;
+      const check = () => {
+        const store = document.querySelector(".source-name")?.textContent ?? "";
+        const journalVisible = Boolean(document.querySelector(".journal-layout"));
+        const journalNavigation = Array.from(document.querySelectorAll(".nav-item")).some((item) => item.textContent?.includes("저널 보존 탐색"));
+        if (document.documentElement.lang === "ko" && localStorage.getItem("mq-watcher-locale") === "ko" && store.includes("current-schema-demo") && journalVisible && journalNavigation) resolve({ locale: document.documentElement.lang, store, journalVisible });
+        else if (Date.now() >= deadline) reject(new Error("locale or cached Store was not restored after server restart"));
+        else setTimeout(check, 50);
+      };
+      check();
+    })`);
+    assert.equal(restoredState.locale, "ko");
+    assert.match(restoredState.store, /current-schema-demo/u);
+    assert.equal(restoredState.journalVisible, true, "the active Journal view must survive a server restart");
+    const restartedCaseText = await evaluate(client, openCaseAndReadUnresolvedExpression);
+    assert.match(restartedCaseText, /현재 미해결|Currently unresolved/u);
+    assert.match(restartedCaseText, /Foreign unresolved evidence/u);
+    assert.match(await evaluate(client, closeStoreAndReadToastExpression), /저장소를 먼저 열어|Open a Store first/u);
+    const syntheticTabs = await evaluate(client, loadSyntheticDemoTwiceExpression);
+    assert.equal(syntheticTabs.length, 2, "double-clicking the demo action must open each synthetic snapshot once");
+    const isolatedJournal = await evaluate(client, inspectJournalStoreIsolationExpression);
+    assert.deepEqual(isolatedJournal, { expanded: 150, reset: 19 });
 
     const overlay = await evaluate(client, "Boolean(document.querySelector('[data-nextjs-dialog], .vite-error-overlay, #webpack-dev-server-client-overlay'))");
     assert.equal(overlay, false, "the application must not show a framework error overlay");
@@ -564,6 +764,15 @@ async function main() {
       "schema-meta version recorded",
       "same-version reload preserved current-schema sentinels",
       "restored foreign case reference rendered as unresolved",
+      "case evidence picker pinned a selected observation",
+      "case creation and deletion persisted to IndexedDB",
+      "journal references loaded 50 initially and continued to 150 on request",
+      "first-time workspace started in English",
+      "selected Korean locale survived an application server restart",
+      "cached Store, active Journal view, and unresolved case survived an application server restart on the same origin",
+      "navigation without a Store displayed an explanatory toast",
+      "double-clicking the synthetic demo opened two unique snapshots without a duplicate race",
+      "Journal selection and progressive reference count reset between Store tabs",
       "application rendered without browser errors",
     ],
     cleanup,

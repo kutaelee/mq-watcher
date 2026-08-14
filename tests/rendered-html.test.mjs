@@ -19,10 +19,10 @@ test("server-renders the MQ Watcher read-only explorer", async () => {
 
   const html = await response.text();
   assert.match(html, /<title>MQ Watcher<\/title>/i);
-  assert.match(html, /저장소 증거 탐색기/);
-  assert.match(html, /ActiveMQ 저장소의 증거를 한곳에서 탐색합니다/);
-  assert.match(html, /분석 디렉터리 선택/);
-  assert.match(html, /원본 보호 모드/);
+  assert.match(html, /STORE EVIDENCE EXPLORER/);
+  assert.match(html, /Explore ActiveMQ store evidence in one place/);
+  assert.match(html, /Open store folder/);
+  assert.match(html, /Source protection/);
   assert.match(html, /한국어/);
   assert.match(html, /English/);
   assert.doesNotMatch(html, /Investigation Guide|Class dictionary/);
@@ -48,11 +48,12 @@ test("ships the bounded worker scanner, localized UI, and sortable tables", asyn
   assert.match(explorer, /pageSize/);
   assert.match(explorer, /EvidenceView/);
   assert.match(explorer, /resolveEvidenceRef/);
-  assert.match(explorer, /demo-result\.json/);
+  assert.match(explorer, /demo-scenario\.json/);
   assert.doesNotMatch(explorer, /InvestigationView|ClassesView|mobile-menu/);
-  assert.match(layout, /<html lang="ko">/);
+  assert.match(layout, /<html lang="en">/);
   await access(new URL("../public/store-scanner.worker.js", import.meta.url));
   await access(new URL("../public/demo-result.json", import.meta.url));
+  await access(new URL("../public/demo-scenario.json", import.meta.url));
   await assert.rejects(access(new URL("../app/_sites-preview", import.meta.url)));
 });
 
@@ -65,6 +66,9 @@ test("ships OSS safety guidance, broker fixture provenance, and portable release
   const demo = JSON.parse(
     await readFile(new URL("../public/demo-result.json", import.meta.url), "utf8"),
   );
+  const scenario = JSON.parse(
+    await readFile(new URL("../public/demo-scenario.json", import.meta.url), "utf8"),
+  );
 
   assert.match(
     readme,
@@ -76,6 +80,8 @@ test("ships OSS safety guidance, broker fixture provenance, and portable release
   assert.match(readme, /\[한국어\]\(README\.ko\.md\)/);
   assert.match(koreanReadme, /\[English\]\(README\.md\)/);
   assert.match(koreanReadme, /브로커를 기동하지 않습니다/);
+  assert.match(readme, /complete English feature guide/);
+  assert.match(koreanReadme, /한국어 전체 기능 사용 가이드/);
   assert.match(security, /IndexedDB/);
   assert.match(security, /no telemetry or external network listener/);
   assert.match(security, /does not download an update asset until the user selects the update action/);
@@ -87,10 +93,37 @@ test("ships OSS safety guidance, broker fixture provenance, and portable release
   assert.equal(demo.signature, "synthetic-demo-v1");
   assert.equal(demo.scannedAt, "2026-01-01T00:00:00.000Z");
   assert.ok(demo.files.every((file) => file.modified === 1767225600000));
+  assert.equal(scenario.snapshots.length, 2);
+  for (const snapshot of scenario.snapshots) {
+    const observedAdvisoryStrings = snapshot.strings.filter((item) => item.value.includes(".Advisory.")).length;
+    assert.equal(snapshot.totals.advisoryRecords, observedAdvisoryStrings);
+  }
+  assert.equal(scenario.snapshots[1].totals.advisoryRecords, 161);
+  assert.ok(scenario.snapshots[1].correlation.links.length > 150);
+  assert.ok(scenario.snapshots.flatMap((snapshot) => snapshot.messages).every((message) => ["CREATE", "DELETE", "Unknown"].includes(message.operation)));
+  assert.doesNotMatch(JSON.stringify(scenario), /Indigo|KAMCO|\\Users\\|\/home\//i);
 
+  const featureScreenshots = [
+    "scenario-overview.png",
+    "view-guide.png",
+    "snapshot-compare.png",
+    "incident-case.png",
+    "journal-progressive.png",
+    "evidence-timeline.png",
+    "evidence-export.png",
+    "destinations.png",
+    "subscriptions.png",
+    "messages.png",
+    "evidence-links-workbench.png",
+    "files.png",
+  ];
   for (const locale of ["en", "ko"]) {
-    for (const name of ["overview.png", "evidence-links.png", "evidence-detail.png"]) {
+    for (const name of featureScreenshots) {
       await access(new URL(`../docs/screenshots/${locale}/${name}`, import.meta.url));
     }
+    await access(new URL(`../docs/media/${locale}/mq-watcher-walkthrough.mp4`, import.meta.url));
+    await access(new URL(`../docs/media/${locale}/mq-watcher-walkthrough.gif`, import.meta.url));
   }
+  await access(new URL("../docs/user-guide.md", import.meta.url));
+  await access(new URL("../docs/user-guide.ko.md", import.meta.url));
 });
