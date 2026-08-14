@@ -1,5 +1,7 @@
 # MQ Watcher
 
+English | [한국어](README.ko.md)
+
 Local, read-only evidence explorer for Apache ActiveMQ Classic store directories.
 
 > **No broker startup. No store recovery. No writes. No uploads. Evidence first.**
@@ -7,6 +9,14 @@ Local, read-only evidence explorer for Apache ActiveMQ Classic store directories
 MQ Watcher separates structured facts, raw observations, pattern matches, and unknowns. It helps an operator follow a message or subscription back to a journal file and byte offset without claiming to know the outage cause.
 
 This is an independent open-source tool. It is not affiliated with or supported by the Apache ActiveMQ project or a commercial messaging vendor.
+
+## Run on Windows
+
+1. Download `mq-watcher-windows-x64.zip` from [Releases](https://github.com/kutaelee/mq-watcher/releases).
+2. Extract the archive.
+3. Run `mq-watcher.exe`.
+
+**No installation. No Node.js required.**
 
 ## What it is
 
@@ -34,9 +44,9 @@ It does **not** diagnose a crashed consumer, prove broker corruption, recover a 
 
 See [Security and privacy](SECURITY.md) before examining production-derived data.
 
-## Quick start
+## Other ways to run
 
-### Portable release
+### Portable release details
 
 Download `mq-watcher-windows-x64.zip` from the GitHub Release, verify it against `SHA256SUMS.txt`, extract it, and run:
 
@@ -48,7 +58,7 @@ The executable starts a server bound only to `127.0.0.1`, chooses an available p
 
 Linux users can extract `mq-watcher-linux-x64.tar.gz` and run `./mq-watcher`.
 
-### Node.js / source
+### Developer installation (Node.js / source)
 
 Requires Node.js 22.13 or newer and a current Chromium-based browser with the File System Access API.
 
@@ -97,11 +107,11 @@ The structured byte rules and official source links are documented in [Structure
 
 All screenshots use the committed synthetic fixture. They contain no customer or operating data.
 
-![Read-only synthetic demo entry point](docs/screenshots/overview.png)
+![Read-only synthetic demo entry point](docs/screenshots/en/overview.png)
 
-![Synthetic evidence links](docs/screenshots/evidence-links.png)
+![Synthetic evidence links](docs/screenshots/en/evidence-links.png)
 
-![Evidence reference detail](docs/screenshots/evidence-detail.png)
+![Evidence reference detail](docs/screenshots/en/evidence-detail.png)
 
 ## Example workflow
 

@@ -23,7 +23,8 @@
     "bin",
     "dist",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "README.ko.md"
   ],
   "engines": {
     "node": ">=22.13.0"
