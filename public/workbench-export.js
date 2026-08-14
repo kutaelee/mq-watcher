@@ -55,7 +55,7 @@ function collectSecrets(value, redaction) {
     if (Array.isArray(item)) { for (const child of item) visit(child, path); return; }
     if (item && typeof item === "object") { for (const child of Object.keys(item)) visit(item[child], path ? `${path}.${child}` : child); return; }
     if (typeof item !== "string" || item.length < 2) return;
-    if (redaction.identifiers && /(^|\.)(id|.*Id|signature|primaryId|rawId|connection|consumer|transactionId|subscriptionKey|messageId|relatedId)$/i.test(path)) add(groups.IDENTIFIER, item);
+    if (redaction.identifiers && /(^|\.)(id|.*Id|signature|primaryId|rawId|connection|consumer|transactionId|subscriptionKey|semanticKey|messageId|relatedId)$/i.test(path)) add(groups.IDENTIFIER, item);
     if (redaction.destinations && /(destination|destinations)(\.|$)|decodedName|rawName/i.test(path)) add(groups.DESTINATION, item);
     if (redaction.filePaths && /file|path|journal|source|relatedStore|directoryName|storeName/i.test(path)) {
       add(groups.FILE, item);
@@ -67,6 +67,7 @@ function collectSecrets(value, redaction) {
       add(groups.FREE_TEXT, item, false);
     }
     if (redactionEnabled && /^comparison\.key$/i.test(path)) add(groups.FREE_TEXT, item, false);
+    if (redactionEnabled && /(^|\.)semanticKey$/i.test(path)) add(groups.FREE_TEXT, item, false);
   };
   visit(value);
   const rules = [];
