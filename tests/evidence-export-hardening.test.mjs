@@ -57,12 +57,13 @@ test("central export sanitizer removes independent free-text and UTF-8 hex canar
   result.strings = [{ id: "raw-safe", file: canaries.file, offset: 0, value: canaries.raw, confidence: "Observed" }];
   result.messages = [{ id: "message-safe", journal: canaries.file, destination: "SAFE.QUEUE", relatedId: "ID:SAFE:1", hex: utf8Hex.join(" "), strings: [] }];
   result.correlation.links = [{ id: "link-safe", evidenceRefs: [], interpretation: canaries.interpretation }];
-  const incidentCase = { id: "case-safe", title: "safe", hypothesis: "safe", notes: [{ id: "note-safe", text: canaries.note, createdAt: "x" }], pins: [{ id: "pin-safe", label: canaries.label }], createdAt: "x", updatedAt: "x" };
+  const foreignStoreName = "OTHER-STORE-NAME-CANARY-88421";
+  const incidentCase = { id: "case-safe", title: "safe", hypothesis: "safe", notes: [{ id: "note-safe", text: canaries.note, createdAt: "x" }], pins: [{ id: "pin-safe", label: canaries.label, storeName: foreignStoreName }], createdAt: "x", updatedAt: "x" };
   const bundle = await buildEvidenceBundle({ result, incidentCase, comparison: [{ id: "comparison-safe", category: "message", key: canaries.comparison }], redaction: { identifiers: true, destinations: true, filePaths: true, notes: true }, generatedAt: "x" });
   const entries = readStoredZip(bundle.bytes);
   const allBytesText = new TextDecoder().decode(bundle.bytes);
   const allEntryText = [...entries.values()].map((value) => new TextDecoder().decode(value)).join("\n");
-  for (const secret of [...Object.values(canaries), unicodeSecret, utf8Hex.join(" "), utf8Hex.join("")]) {
+  for (const secret of [...Object.values(canaries), foreignStoreName, unicodeSecret, utf8Hex.join(" "), utf8Hex.join("")]) {
     assert.ok(!allEntryText.includes(secret), `entry leaked ${secret}`);
     assert.ok(!allBytesText.includes(secret), `ZIP bytes leaked ${secret}`);
   }

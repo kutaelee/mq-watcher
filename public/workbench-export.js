@@ -57,7 +57,7 @@ function collectSecrets(value, redaction) {
     if (typeof item !== "string" || item.length < 2) return;
     if (redaction.identifiers && /(^|\.)(id|.*Id|signature|primaryId|rawId|connection|consumer|transactionId|subscriptionKey|messageId|relatedId)$/i.test(path)) add(groups.IDENTIFIER, item);
     if (redaction.destinations && /(destination|destinations)(\.|$)|decodedName|rawName/i.test(path)) add(groups.DESTINATION, item);
-    if (redaction.filePaths && /file|path|journal|source|relatedStore|directoryName/i.test(path)) {
+    if (redaction.filePaths && /file|path|journal|source|relatedStore|directoryName|storeName/i.test(path)) {
       add(groups.FILE, item);
       const name = item.split(/[\\/]/).at(-1);
       if (name?.length > 1) groups.FILE.add(name);
