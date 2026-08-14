@@ -24,6 +24,7 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run build
+      - run: npm run test:e2e:indexeddb
       - run: npm test
       - run: npm run test:fixtures
       - run: npm run test:broker-fixtures

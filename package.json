@@ -35,6 +35,7 @@
     "build:portable": "npm run build && node scripts/build-portable.mjs",
     "test:portable-cache": "node --test tests/portable-cache.test.mjs",
     "test:portable": "node scripts/smoke-portable.mjs",
+    "test:e2e:indexeddb": "node scripts/e2e-indexeddb-migration.mjs",
     "typecheck": "tsc --noEmit --incremental false",
     "start": "vinext start",
     "test": "npm run build && node --test tests/*.test.mjs",
