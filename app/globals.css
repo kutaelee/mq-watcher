@@ -237,6 +237,24 @@ code, pre, .mono-cell, .mono-value {
 .journal-refs > div { min-width: 0; display: grid; grid-template-columns: 62px minmax(0, 1fr) auto; gap: 7px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border); }
 .journal-refs code, .journal-refs span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 8px; }
 .journal-disclaimer { margin: 13px 0 0; padding: 9px; border-radius: 7px; background: var(--amber-soft); color: var(--text-soft); font-size: 9px; line-height: 1.55; }
+.timeline-toolbar { display: flex; align-items: center; gap: 9px; padding: 11px; }
+.timeline-toolbar .inline-search { max-width: none; flex: 1; }
+.timeline-toolbar select { height: 34px; padding: 0 9px; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--panel-soft); color: var(--text); font-size: 10px; }
+.timeline-card { padding: 0 16px; }
+.timeline-list { position: relative; }
+.timeline-list::before { content: ""; position: absolute; top: 20px; bottom: 20px; left: 20px; width: 1px; background: var(--border-strong); }
+.timeline-event { position: relative; display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.timeline-event:last-child { border-bottom: 0; }
+.timeline-marker { position: relative; z-index: 1; display: flex; justify-content: center; padding-top: 2px; }
+.timeline-marker span { min-width: 25px; height: 20px; display: grid; place-items: center; padding: 0 4px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--panel); color: var(--muted); font: 600 8px var(--font-geist-mono), monospace; }
+.timeline-content { min-width: 0; }
+.timeline-content > div { display: flex; align-items: center; gap: 7px; }
+.timeline-content strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+.timeline-content p { margin: 6px 0 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-soft); font-size: 9px; }
+.timeline-content code { font-size: 8px; }
+.timeline-content small { color: var(--muted); font: 500 8px var(--font-geist-mono), monospace; }
+.timeline-pages { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.timeline-pages > span { color: var(--muted); font: 600 9px var(--font-geist-mono), monospace; }
 .page-frame { width: 100%; max-width: 1500px; margin: 0 auto; padding: 26px 28px 64px; }
 .page-heading { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
 .breadcrumb { gap: 5px; margin-bottom: 8px; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .09em; font-weight: 700; }

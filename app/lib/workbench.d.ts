@@ -13,3 +13,6 @@ export function addCaseNote(incident: import("./types").IncidentCase, text: stri
 export function buildInvestigativeLeads(result: unknown, thresholds?: typeof LEAD_THRESHOLDS): Array<{ code: string; observed: number; threshold: number; detail?: string }>;
 export type JournalRetentionRow = { id: string; path: string; fileId: number | null; size: number; modified: number; recordCount: number; referenceCount: number; firstOffset: number | null; lastOffset: number | null; destinations: string[]; commands: string[]; references: import("./types").EvidenceRef[]; sequence: "older-file-id" | "highest-file-id" | "unknown-order"; observation: "references-observed" | "records-observed" | "no-structured-observation" };
 export function buildJournalRetentionIndex(result: unknown): JournalRetentionRow[];
+export const MAX_TIMELINE_EVENTS: number;
+export type TimelineEvent = { id: string; file: string; dataFileId: number | null; offset: number | null; command: string; category: "subscription" | "transaction" | "message" | "record"; destination: string; primaryId: string; status: string; confidence: import("./types").Confidence };
+export function buildEvidenceTimeline(result: unknown, limit?: number): { events: TimelineEvent[]; total: number; truncated: boolean; ordering: "data-file-id-offset" };

@@ -164,3 +164,24 @@ export function buildJournalRetentionIndex(result) {
     };
   }).sort((a, b) => (a.fileId ?? Number.MAX_SAFE_INTEGER) - (b.fileId ?? Number.MAX_SAFE_INTEGER) || a.path.localeCompare(b.path));
 }
+
+export const MAX_TIMELINE_EVENTS = 10_000;
+
+export function buildEvidenceTimeline(result, limit = MAX_TIMELINE_EVENTS) {
+  const records = (result?.structured?.records ?? []).map((record, index) => ({
+    id: `${record.location?.dataFileId ?? journalFileId(record.file) ?? -1}:${record.location?.offset ?? -1}:${index}`,
+    file: record.file,
+    dataFileId: record.location?.dataFileId ?? journalFileId(record.file),
+    offset: record.location?.offset ?? null,
+    command: record.command || "Unknown",
+    category: record.subscriptionKey ? "subscription" : record.transactionId ? "transaction" : record.messageId ? "message" : "record",
+    destination: record.destination?.name ?? "Unknown",
+    primaryId: record.messageId ?? record.subscriptionKey ?? record.transactionId ?? "Unknown",
+    status: record.status ?? "Unknown",
+    confidence: record.confidence ?? "Unknown",
+  })).sort((a, b) => (a.dataFileId ?? Number.MAX_SAFE_INTEGER) - (b.dataFileId ?? Number.MAX_SAFE_INTEGER)
+    || (a.offset ?? Number.MAX_SAFE_INTEGER) - (b.offset ?? Number.MAX_SAFE_INTEGER)
+    || a.command.localeCompare(b.command)
+    || a.id.localeCompare(b.id));
+  return { events: records.slice(0, Math.max(0, limit)), total: records.length, truncated: records.length > limit, ordering: "data-file-id-offset" };
+}

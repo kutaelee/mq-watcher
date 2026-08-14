@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addCaseNote, addCasePin, buildInvestigativeLeads, buildJournalRetentionIndex, buildSnapshotDiff, closeSession, createIncidentCase, findReusableSession, MAX_STORE_SESSIONS, restoreSessions, sessionId } from "../app/lib/workbench.mjs";
+import { addCaseNote, addCasePin, buildEvidenceTimeline, buildInvestigativeLeads, buildJournalRetentionIndex, buildSnapshotDiff, closeSession, createIncidentCase, findReusableSession, MAX_STORE_SESSIONS, restoreSessions, sessionId } from "../app/lib/workbench.mjs";
 
 test("session IDs and duplicate lookup are deterministic", () => {
   assert.equal(sessionId("3:store:1:abc"), sessionId("3:store:1:abc"));
@@ -77,4 +77,16 @@ test("journal reverse index preserves file order and observed references", () =>
   assert.equal(rows[0].referenceCount, 1);
   assert.equal(rows[0].sequence, "older-file-id");
   assert.equal(rows[1].observation, "no-structured-observation");
+});
+
+test("evidence timeline uses deterministic file and offset order without timestamps", () => {
+  const result = { structured: { records: [
+    { file: "db-2.log", location: { dataFileId: 2, offset: 4 }, command: "Second", status: "Parsed", confidence: "Parsed" },
+    { file: "db-1.log", location: { dataFileId: 1, offset: 40 }, command: "Later", status: "Parsed", confidence: "Parsed" },
+    { file: "db-1.log", location: { dataFileId: 1, offset: 8 }, command: "First", status: "Partial", confidence: "Parsed" },
+  ] } };
+  const timeline = buildEvidenceTimeline(result, 2);
+  assert.deepEqual(timeline.events.map((event) => event.command), ["First", "Later"]);
+  assert.equal(timeline.truncated, true);
+  assert.ok(timeline.events.every((event) => !("timestamp" in event) && !("time" in event)));
 });
