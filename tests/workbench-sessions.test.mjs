@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { addCaseNote, addCasePin, buildEvidenceTimeline, buildInvestigativeLeads, buildJournalRetentionIndex, buildSnapshotDiff, buildStoreSignature, buildStoreSignatureInWorker, closeSession, createIncidentCase, findReusableSession, getSessionCapabilities, MAX_STORE_SESSIONS, resolveCasePin, restoreSessions, sessionId, SessionResourceLedger, SignatureReservationRegistry } from "../app/lib/workbench.mjs";
 import { STORE_IDENTITY_CHUNK_BYTES } from "../public/store-identity.js";
-import { applyDatabaseUpgrade, CACHE_SCHEMA_VERSION, enqueueScanCacheWrite, planDatabaseMigration } from "../app/lib/scan-cache.ts";
+import { applyDatabaseUpgrade, CACHE_SCHEMA_VERSION, enqueueScanCacheWrite, planDatabaseMigration } from "../app/lib/scan-cache-core.mjs";
 import { buildEvidenceBundle } from "../public/workbench-export.js";
 
 function readStoredZip(bytes) {

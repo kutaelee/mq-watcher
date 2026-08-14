@@ -1,70 +1,21 @@
 import type { IncidentCase, ScanResult } from "./types";
+import {
+  applyDatabaseUpgrade,
+  CACHE_SCHEMA_VERSION,
+} from "./scan-cache-core.mjs";
+
+export {
+  applyDatabaseUpgrade,
+  CACHE_SCHEMA_VERSION,
+  enqueueScanCacheWrite,
+  planDatabaseMigration,
+} from "./scan-cache-core.mjs";
 
 const DB_NAME = "mq-watcher";
 const STORE_NAME = "scan-results";
 const WORKBENCH_STORE = "workbench-state";
 const CASE_STORE = "incident-cases";
-const META_STORE = "schema-meta";
-export const CACHE_SCHEMA_VERSION = 4;
 const DB_VERSION = CACHE_SCHEMA_VERSION;
-
-type UpgradeDatabase = Pick<IDBDatabase, "objectStoreNames" | "createObjectStore">;
-type UpgradeTransaction = Pick<IDBTransaction, "objectStore">;
-
-export function planDatabaseMigration(oldVersion: number) {
-  return {
-    from: oldVersion,
-    to: CACHE_SCHEMA_VERSION,
-    invalidateScanResults: oldVersion > 0 && oldVersion < CACHE_SCHEMA_VERSION,
-    invalidateWorkbenchState: oldVersion > 0 && oldVersion < CACHE_SCHEMA_VERSION,
-    preserveIncidentCases: true,
-  } as const;
-}
-
-export function applyDatabaseUpgrade(
-  db: UpgradeDatabase,
-  transaction: UpgradeTransaction | null,
-  oldVersion: number,
-): void {
-  const existing = new Set(Array.from(db.objectStoreNames));
-  if (!existing.has(STORE_NAME)) db.createObjectStore(STORE_NAME, { keyPath: "signature" });
-  if (!existing.has(WORKBENCH_STORE)) db.createObjectStore(WORKBENCH_STORE, { keyPath: "id" });
-  if (!existing.has(CASE_STORE)) db.createObjectStore(CASE_STORE, { keyPath: "id" });
-  if (!existing.has(META_STORE)) db.createObjectStore(META_STORE, { keyPath: "id" });
-
-  const plan = planDatabaseMigration(oldVersion);
-  if (transaction && plan.invalidateScanResults && existing.has(STORE_NAME)) {
-    transaction.objectStore(STORE_NAME).clear();
-  }
-  if (transaction && plan.invalidateWorkbenchState && existing.has(WORKBENCH_STORE)) {
-    transaction.objectStore(WORKBENCH_STORE).clear();
-  }
-  transaction?.objectStore(META_STORE).put({ id: "schema", version: CACHE_SCHEMA_VERSION });
-}
-
-const cacheWriteQueues = new Map<string, Promise<void>>();
-
-export async function enqueueScanCacheWrite(
-  signature: string,
-  generation: string,
-  isCurrent: (signature: string, generation: string) => boolean,
-  write: () => Promise<void>,
-): Promise<boolean> {
-  const previous = cacheWriteQueues.get(signature) ?? Promise.resolve();
-  let applied = false;
-  const queued = previous.catch(() => undefined).then(async () => {
-    if (!isCurrent(signature, generation)) return;
-    await write();
-    applied = true;
-  });
-  cacheWriteQueues.set(signature, queued);
-  try {
-    await queued;
-    return applied;
-  } finally {
-    if (cacheWriteQueues.get(signature) === queued) cacheWriteQueues.delete(signature);
-  }
-}
 
 export type PersistedWorkbenchState = {
   id: "current";

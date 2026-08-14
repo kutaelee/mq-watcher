@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { access, mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -10,6 +10,7 @@ const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)
 const CURRENT_DATABASE_VERSION = 4;
 const E2E_PREFIX = "mq-watcher-indexeddb-e2e-";
 const PROCESS_EXIT_TIMEOUT_MS = 5_000;
+const DEVTOOLS_READY_TIMEOUT_MS = 30_000;
 
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
@@ -90,37 +91,35 @@ async function waitForServer(url, child, output) {
   throw new Error(`Timed out waiting for ${url}:\n${output()}`);
 }
 
-async function waitForDevToolsPort(userDataDirectory, child) {
-  const activePortFile = path.join(userDataDirectory, "DevToolsActivePort");
-  const deadline = Date.now() + 20_000;
-  while (Date.now() < deadline) {
-    if (child.exitCode !== null) throw new Error(`Browser exited before DevTools became ready (${child.exitCode})`);
-    try {
-      const [port] = (await readFile(activePortFile, "utf8")).split(/\r?\n/u);
-      if (/^\d+$/u.test(port)) return Number(port);
-    } catch {
-      // Chrome creates this file after its isolated profile is initialized.
-    }
-    await sleep(100);
-  }
-  throw new Error(`Timed out waiting for ${activePortFile}`);
-}
-
-async function waitForPageTarget(debugPort) {
-  const deadline = Date.now() + 10_000;
+async function waitForPageTarget(debugPort, child, output) {
+  const endpoint = `http://127.0.0.1:${debugPort}/json/list`;
+  const deadline = Date.now() + DEVTOOLS_READY_TIMEOUT_MS;
+  let lastError = "DevTools endpoint did not respond";
   while (Date.now() < deadline) {
     try {
-      const targets = await fetch(`http://127.0.0.1:${debugPort}/json/list`, {
+      const response = await fetch(endpoint, {
         signal: AbortSignal.timeout(1_000),
-      }).then((response) => response.json());
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const targets = await response.json();
       const page = targets.find((target) => target.type === "page" && target.webSocketDebuggerUrl);
       if (page) return page.webSocketDebuggerUrl;
-    } catch {
-      // DevTools HTTP discovery can lag behind DevToolsActivePort creation.
+      lastError = `DevTools returned ${targets.length} target(s), but no page target`;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+    if (child.exitCode !== null || child.signalCode !== null) {
+      throw new Error(
+        `Browser exited before DevTools became ready (exit=${child.exitCode ?? "null"}, signal=${child.signalCode ?? "null"}).\n`
+        + `endpoint: ${endpoint}\nlast error: ${lastError}\nbrowser output:\n${output() || "<empty>"}`,
+      );
     }
     await sleep(100);
   }
-  throw new Error("Timed out waiting for a Chrome page target");
+  throw new Error(
+    `Timed out after ${DEVTOOLS_READY_TIMEOUT_MS}ms waiting for a Chrome page target.\n`
+    + `endpoint: ${endpoint}\nlast error: ${lastError}\nbrowser output:\n${output() || "<empty>"}`,
+  );
 }
 
 class CdpClient {
@@ -439,6 +438,7 @@ async function main() {
   let browserProcess;
   let client;
   let serverOutput = () => "";
+  let browserOutput = () => "";
   let testError;
   const browserErrors = [];
   const cleanup = { browserPid: null, browserStopped: false, serverPid: null, serverStopped: false, temporaryRoot, temporaryRootRemoved: false };
@@ -455,10 +455,11 @@ async function main() {
     serverOutput = captureOutput(serverProcess);
     await waitForServer(`${origin}/favicon.svg`, serverProcess, serverOutput);
 
+    const debugPort = await reserveLoopbackPort();
     const browserArguments = [
       "--headless=new",
       "--remote-debugging-address=127.0.0.1",
-      "--remote-debugging-port=0",
+      `--remote-debugging-port=${debugPort}`,
       `--user-data-dir=${userDataDirectory}`,
       `--disk-cache-dir=${cacheDirectory}`,
       "--no-first-run",
@@ -474,14 +475,14 @@ async function main() {
     if (process.platform !== "win32" && typeof process.getuid === "function" && process.getuid() === 0) browserArguments.push("--no-sandbox");
     browserArguments.push("about:blank");
     browserProcess = spawn(browserExecutable, browserArguments, {
-      stdio: "ignore",
+      stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
       detached: process.platform !== "win32",
     });
     cleanup.browserPid = browserProcess.pid;
+    browserOutput = captureOutput(browserProcess);
 
-    const debugPort = await waitForDevToolsPort(userDataDirectory, browserProcess);
-    client = new CdpClient(await waitForPageTarget(debugPort));
+    client = new CdpClient(await waitForPageTarget(debugPort, browserProcess, browserOutput));
     await client.connect();
     await client.send("Page.enable");
     await client.send("Runtime.enable");
@@ -541,6 +542,10 @@ async function main() {
   if (testError) {
     const diagnostics = serverOutput();
     if (diagnostics) testError.message += `\nvinext output:\n${diagnostics}`;
+    const browserDiagnostics = browserOutput();
+    if (browserDiagnostics && !testError.message.includes("browser output:")) {
+      testError.message += `\nbrowser output:\n${browserDiagnostics}`;
+    }
     testError.message += `\ncleanup: ${JSON.stringify(cleanup)}`;
     throw testError;
   }
