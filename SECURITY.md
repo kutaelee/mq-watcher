@@ -4,7 +4,7 @@
 
 MQ Watcher is designed for local, read-only examination. The CLI binds to `127.0.0.1`; the browser requests read-only directory handles and scans files in a Worker. The application has no store-upload endpoint and does not connect to a broker or external analysis service.
 
-The standalone executable has no telemetry, automatic update client, or external network listener. It extracts only its packaged application files to `%LOCALAPPDATA%\MQ Watcher\Cache\<version-hash>` on Windows or `${XDG_CACHE_HOME:-~/.cache}/mq-watcher/<version-hash>` on Linux and verifies their SHA-256 values before loading them. Selected Store files remain browser-read-only and are not copied into this application cache.
+The standalone executable has no telemetry or external network listener. When the UI opens, its update panel requests release metadata from the fixed GitHub Releases endpoint for this repository. It does not send Store paths, Store names, source bytes, analysis results, or case notes, and it does not download an update asset until the user selects the update action. The executable extracts only its packaged application files to `%LOCALAPPDATA%\MQ Watcher\Cache\<version-hash>` on Windows or `${XDG_CACHE_HOME:-~/.cache}/mq-watcher/<version-hash>` on Linux and verifies their SHA-256 values before loading them. Selected Store files remain browser-read-only and are not copied into this application cache.
 
 Release archives are accompanied by `SHA256SUMS.txt`. Windows executables are currently unsigned and may trigger a SmartScreen warning; verify the downloaded archive hash before overriding a warning.
 

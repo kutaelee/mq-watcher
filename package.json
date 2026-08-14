@@ -1,6 +1,6 @@
 {
   "name": "mq-watcher",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Local read-only ActiveMQ Classic store evidence explorer",
   "license": "MIT",
   "repository": {
@@ -33,7 +33,10 @@
     "dev": "vinext dev",
     "build": "vinext build",
     "build:portable": "npm run build && node scripts/build-portable.mjs",
+    "test:portable-cache": "node --test tests/portable-cache.test.mjs",
     "test:portable": "node scripts/smoke-portable.mjs",
+    "test:e2e:indexeddb": "node scripts/e2e-indexeddb-migration.mjs",
+    "typecheck": "tsc --noEmit --incremental false",
     "start": "vinext start",
     "test": "npm run build && node --test tests/*.test.mjs",
     "test:fixtures": "node --test tests/fixtures.test.mjs",

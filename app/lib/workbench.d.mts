@@ -1,0 +1,31 @@
+export const MAX_STORE_SESSIONS: number;
+export type StoreIdentityFile = { size: number; slice(start?: number, end?: number): { arrayBuffer(): Promise<ArrayBuffer> } };
+export type StoreIdentityProgress = { relativePath: string; fileIndex: number; fileCount: number; readBytes: number; totalBytes: number };
+export function buildStoreSignature(files: Array<{ relativePath: string; file: StoreIdentityFile }>, scannerVersion?: string, options?: { signal?: AbortSignal; chunkBytes?: number; onProgress?: (progress: StoreIdentityProgress) => void }): Promise<string>;
+export function buildStoreSignatureInWorker(files: Array<{ relativePath: string; file: StoreIdentityFile }>, scannerVersion?: string, options?: { signal?: AbortSignal; onProgress?: (progress: StoreIdentityProgress) => void; createWorker?: () => Worker }): Promise<string>;
+export class SignatureReservationRegistry { reserve(signature: string): { accepted: boolean; token: string }; isCurrent(signature: string, token: string): boolean; release(signature: string, token: string): void; readonly size: number; }
+export class SessionResourceLedger { add(sessionId: string, resource: { kind: string; value?: unknown; remove?: () => void; clear?: (value: unknown) => void; revoke?: (value: unknown) => void }): void; cleanup(sessionId: string): void; cleanupAll(): void; count(sessionId: string): number; }
+export function sessionId(signature: string): string;
+export function findReusableSession<T extends { signature: string }>(sessions: T[], signature: string): T | null;
+export function closeSession<T extends { id: string }>(sessions: T[], activeSessionId: string | null, closingId: string): { sessions: T[]; activeSessionId: string | null };
+export function restoreSessions<T>(state: unknown): T[];
+export function getSessionCapabilities(session: { result?: unknown; sourceAccess?: string }): { cachedAnalysis: boolean; compare: boolean; incidentCase: boolean; exportDerivedEvidence: boolean; rescanSource: boolean; verifySourceIntegrity: boolean };
+export const DIFF_IDENTITY_RULES: Readonly<Record<string, string>>;
+export type SnapshotDiffRow = { id: string; category: string; key: string; leftValue: number | null; rightValue: number | null; delta: number | null; status: "not-observed-left" | "not-observed-right" | "changed"; identityRule: string; metric: string };
+export function collectSnapshotFacts(result: unknown): { entities: Map<string, number>; rawOccurrences: Map<string, number>; uniqueCounts: Map<string, number> };
+export function buildSnapshotDiff(left: unknown, right: unknown): SnapshotDiffRow[];
+export const LEAD_THRESHOLDS: Readonly<{ advisoryObservations: number; unknownRecords: number; journalConcentrationPercent: number; journalConcentrationMinimum: number }>;
+export function createIncidentCase(now?: string, id?: string): import("./types").IncidentCase;
+export function addCasePin(incident: import("./types").IncidentCase, pin: Omit<import("./types").CasePin, "pinnedAt">, now?: string): import("./types").IncidentCase;
+export function addCaseNote(incident: import("./types").IncidentCase, text: string, now?: string, id?: string): import("./types").IncidentCase;
+export function buildInvestigativeLeads(result: unknown, thresholds?: typeof LEAD_THRESHOLDS): Array<{ code: string; whyCode: string; notProveCode: string; observed: number; threshold: number; detail?: string }>;
+export type JournalRetentionRow = { id: string; path: string; fileId: number | null; size: number; modified: number; recordCount: number; referenceCount: number; firstOffset: number | null; lastOffset: number | null; destinations: string[]; commands: string[]; references: import("./types").EvidenceRef[]; sequence: "filename-derived-id" | "unknown-order"; observation: "references-observed" | "records-observed" | "no-structured-observation" };
+export function buildJournalRetentionIndex(result: unknown): JournalRetentionRow[];
+export const MAX_TIMELINE_EVENTS: number;
+export type TimelineEvent = { id: string; file: string; dataFileId: number | null; offset: number | null; command: string; category: "subscription" | "transaction" | "message" | "record"; destination: string; primaryId: string; status: string; confidence: import("./types").Confidence };
+export function buildEvidenceTimeline(result: unknown, limit?: number): { events: TimelineEvent[]; total: number; truncated: boolean; ordering: "per-journal-offset" };
+export function semanticEvidenceKeys(result: unknown): Set<string>;
+export function resolveCasePin(pin: { storeSignature: string; semanticKey: string }, results: Array<{ signature: string }>): { status: "resolved" | "unresolved"; reason: string };
+export function stableStringify(value: unknown): string;
+export function buildStoredZip(entries: Array<{ name: string; data: string | Uint8Array }>): Uint8Array;
+export function buildEvidenceBundle(options: { result: import("./types").ScanResult; incidentCase?: import("./types").IncidentCase | null; comparison?: SnapshotDiffRow[]; locale?: "ko" | "en"; redaction?: { identifiers?: boolean; destinations?: boolean; filePaths?: boolean; notes?: boolean }; generatedAt?: string }): Promise<{ bytes: Uint8Array; sha256: string; manifest: Record<string, unknown>; entryNames: string[] }>;

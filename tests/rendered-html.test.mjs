@@ -61,6 +61,7 @@ test("ships OSS safety guidance, broker fixture provenance, and portable release
   const koreanReadme = await readFile(new URL("../README.ko.md", import.meta.url), "utf8");
   const security = await readFile(new URL("../SECURITY.md", import.meta.url), "utf8");
   const contributing = await readFile(new URL("../CONTRIBUTING.md", import.meta.url), "utf8");
+  const i18n = await readFile(new URL("../app/lib/i18n.tsx", import.meta.url), "utf8");
   const demo = JSON.parse(
     await readFile(new URL("../public/demo-result.json", import.meta.url), "utf8"),
   );
@@ -76,7 +77,11 @@ test("ships OSS safety guidance, broker fixture provenance, and portable release
   assert.match(koreanReadme, /\[English\]\(README\.md\)/);
   assert.match(koreanReadme, /브로커를 기동하지 않습니다/);
   assert.match(security, /IndexedDB/);
-  assert.match(security, /no telemetry, automatic update client, or external network listener/);
+  assert.match(security, /no telemetry or external network listener/);
+  assert.match(security, /does not download an update asset until the user selects the update action/);
+  for (const localizedTitle of ["조사 케이스", "저널 보존 탐색", "증거 타임라인", "증거 번들 내보내기"]) {
+    assert.match(i18n, new RegExp(`"view\\.[^"]+\\.title": "${localizedTitle}"`));
+  }
   assert.match(contributing, /Read-only invariant/);
   assert.equal(demo.directoryName, "synthetic-kahadb-demo");
   assert.equal(demo.signature, "synthetic-demo-v1");

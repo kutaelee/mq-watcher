@@ -196,3 +196,25 @@ export type FileInput = {
   relativePath: string;
   file: File;
 };
+
+export type CasePin = {
+  id: string;
+  semanticKey: string;
+  storeSignature: string;
+  storeName: string;
+  kind: string;
+  label: string;
+  provenance: { file: string; offset: number | null };
+  confidence: Confidence;
+  pinnedAt: string;
+};
+
+export type IncidentCase = {
+  id: string;
+  title: string;
+  hypothesis: string;
+  notes: Array<{ id: string; text: string; createdAt: string }>;
+  pins: CasePin[];
+  createdAt: string;
+  updatedAt: string;
+};

@@ -21,9 +21,12 @@ jobs:
       - name: Verify tag matches package version
         run: node -e "if ('v' + require('./package.json').version !== process.env.GITHUB_REF_NAME) process.exit(1)"
       - run: npm run lint
+      - run: npm run typecheck
       - run: npm test
+      - run: npm run test:e2e:indexeddb
       - run: npm run test:fixtures
       - run: npm run test:broker-fixtures
+      - run: npm run test:portable-cache
 
   broker-generated-fixtures:
     runs-on: ubuntu-latest
@@ -84,9 +87,11 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force release | Out-Null
+          Copy-Item outputs\mq-watcher.exe release\mq-watcher.exe
           Compress-Archive -LiteralPath outputs\mq-watcher.exe -DestinationPath release\mq-watcher-windows-x64.zip
-          $hash = (Get-FileHash release\mq-watcher-windows-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  mq-watcher-windows-x64.zip" | Set-Content release\windows-x64.sha256 -Encoding ascii
+          $exeHash = (Get-FileHash release\mq-watcher.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          $zipHash = (Get-FileHash release\mq-watcher-windows-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          @("$exeHash  mq-watcher.exe", "$zipHash  mq-watcher-windows-x64.zip") | Set-Content release\windows-x64.sha256 -Encoding ascii
       - name: Package Linux executable
         if: runner.os == 'Linux'
         shell: bash
