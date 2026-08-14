@@ -1,4 +1,4 @@
-import { buildEvidenceBundle } from "/workbench-export.js";
+import { buildEvidenceBundle } from "./workbench-export.js";
 
 const cancelled = new Set();
 

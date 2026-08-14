@@ -1,4 +1,5 @@
 const encoder = new TextEncoder();
+const EXPORT_YIELD_INTERVAL = 2048;
 
 function cancelled(options) {
   if (options?.isCancelled?.()) throw new DOMException("Export cancelled", "AbortError");
@@ -43,9 +44,11 @@ function journalIndex(result) {
 }
 
 function collectSecrets(value, redaction) {
-  const groups = { IDENTIFIER: new Set(), DESTINATION: new Set(), FILE: new Set(), NOTE: new Set() };
-  const add = (group, item) => {
+  const groups = { IDENTIFIER: new Set(), DESTINATION: new Set(), FILE: new Set(), NOTE: new Set(), FREE_TEXT: new Set() };
+  const redactionEnabled = Object.values(redaction).some(Boolean);
+  const add = (group, item, includeTokens = true) => {
     group.add(item);
+    if (!includeTokens) return;
     for (const token of item.match(/[\p{L}\p{N}][\p{L}\p{N}_.:@-]{5,}/gu) ?? []) group.add(token);
   };
   const visit = (item, path = "") => {
@@ -60,26 +63,67 @@ function collectSecrets(value, redaction) {
       if (name?.length > 1) groups.FILE.add(name);
     }
     if (redaction.notes && /text|hypothesis|title/i.test(path)) add(groups.NOTE, item);
+    if (redactionEnabled && /(^|\.)(warnings?|warning|interpretation|label|value|detail|description)(\.|$)/i.test(path)) {
+      add(groups.FREE_TEXT, item, false);
+    }
+    if (redactionEnabled && /^comparison\.key$/i.test(path)) add(groups.FREE_TEXT, item, false);
   };
   visit(value);
   const rules = [];
+  const assigned = new Set();
   for (const [type, values] of Object.entries(groups)) {
-    [...values].sort((a, b) => b.length - a.length || a.localeCompare(b)).forEach((secret, index) => rules.push({ secret, alias: `${type}-${String(index + 1).padStart(3, "0")}` }));
+    let index = 0;
+    for (const secret of [...values].sort((a, b) => b.length - a.length || a.localeCompare(b))) {
+      if (assigned.has(secret)) continue;
+      assigned.add(secret);
+      index += 1;
+      rules.push({ secret, alias: `${type}-${String(index).padStart(3, "0")}` });
+    }
   }
   return rules.sort((a, b) => b.secret.length - a.secret.length || a.secret.localeCompare(b.secret));
 }
 
-function sanitizeString(value, rules) {
-  let sanitized = value;
-  for (const rule of rules) sanitized = sanitized.split(rule.secret).join(rule.alias);
-  return sanitized;
+function compileSanitizer(rules) {
+  const root = { children: new Map(), alias: null };
+  for (const rule of rules) {
+    let node = root;
+    for (const unit of rule.secret) {
+      if (!node.children.has(unit)) node.children.set(unit, { children: new Map(), alias: null });
+      node = node.children.get(unit);
+    }
+    if (node.alias === null) node.alias = rule.alias;
+  }
+  return (input) => {
+    const units = [...input];
+    const output = [];
+    let index = 0;
+    while (index < units.length) {
+      let node = root;
+      let cursor = index;
+      let match = null;
+      while (cursor < units.length && node.children.has(units[cursor])) {
+        node = node.children.get(units[cursor]);
+        cursor += 1;
+        if (node.alias !== null) match = { alias: node.alias, end: cursor };
+      }
+      if (match) {
+        output.push(match.alias);
+        index = match.end;
+      } else {
+        output.push(units[index]);
+        index += 1;
+      }
+    }
+    return output.join("");
+  };
 }
 
 async function sanitizeTree(value, rules, options) {
   let visited = 0;
+  const sanitizeString = compileSanitizer(rules);
   const visit = async (item, key = "") => {
     visited += 1;
-    if (visited % 500 === 0) await yieldTask(options, Math.min(34, 10 + Math.floor(visited / 500)), "sanitize");
+    if (visited % EXPORT_YIELD_INTERVAL === 0) await yieldTask(options, Math.min(34, 10 + Math.floor(visited / EXPORT_YIELD_INTERVAL)), "sanitize");
     if (Array.isArray(item)) {
       const output = [];
       for (const child of item) output.push(await visit(child, key));
@@ -101,22 +145,34 @@ async function sanitizeTree(value, rules, options) {
 
 export async function chunkedStableStringify(value, options = {}) {
   const chunks = [];
+  let pending = [];
+  let pendingLength = 0;
   let processed = 0;
+  const append = (value) => {
+    pending.push(value);
+    pendingLength += value.length;
+    if (pendingLength >= 64 * 1024) {
+      chunks.push(pending.join(""));
+      pending = [];
+      pendingLength = 0;
+    }
+  };
   const write = async (item) => {
     processed += 1;
-    if (processed % 500 === 0) await yieldTask(options, Math.min(70, 36 + Math.floor(processed / 500)), "serialize");
+    if (processed % EXPORT_YIELD_INTERVAL === 0) await yieldTask(options, Math.min(70, 36 + Math.floor(processed / EXPORT_YIELD_INTERVAL)), "serialize");
     if (Array.isArray(item)) {
-      chunks.push("[");
-      for (let index = 0; index < item.length; index += 1) { if (index) chunks.push(","); await write(item[index]); }
-      chunks.push("]");
+      append("[");
+      for (let index = 0; index < item.length; index += 1) { if (index) append(","); await write(item[index]); }
+      append("]");
     } else if (item && typeof item === "object") {
-      chunks.push("{");
+      append("{");
       const keys = Object.keys(item).sort();
-      for (let index = 0; index < keys.length; index += 1) { if (index) chunks.push(","); chunks.push(JSON.stringify(keys[index]), ":"); await write(item[keys[index]]); }
-      chunks.push("}");
-    } else chunks.push(JSON.stringify(item));
+      for (let index = 0; index < keys.length; index += 1) { if (index) append(","); append(JSON.stringify(keys[index])); append(":"); await write(item[keys[index]]); }
+      append("}");
+    } else append(JSON.stringify(item));
   };
   await write(value);
+  if (pendingLength) chunks.push(pending.join(""));
   return chunks.join("");
 }
 
