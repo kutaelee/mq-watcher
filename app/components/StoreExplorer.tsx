@@ -310,6 +310,7 @@ function ExplorerApp() {
   const [detailOpen, setDetailOpen] = useState(true);
   const [dark, setDark] = useState(false);
   const workersRef = useRef(new Map<string, Worker>());
+  const preparationControllerRef = useRef<AbortController | null>(null);
   const sessionsRef = useRef<StoreSession[]>(sessions);
   const reservationsRef = useRef(new SignatureReservationRegistry());
   const resourcesRef = useRef(new SessionResourceLedger());
@@ -353,11 +354,14 @@ function ExplorerApp() {
   }, []);
 
   useEffect(() => {
+    let mounted = true;
     readWorkbenchState().then((state) => {
+      if (!mounted) return;
       const cached = restoreSessions<StoreSession>(state);
       setSessions(cached);
       setActiveSessionId(cached.some((session) => session.id === state?.activeSessionId) ? state?.activeSessionId ?? null : cached[0]?.id ?? null);
-    }).catch(() => undefined).finally(() => setRestored(true));
+    }).catch(() => undefined).finally(() => { if (mounted) setRestored(true); });
+    return () => { mounted = false; };
   }, []);
 
   useEffect(() => {
@@ -375,6 +379,8 @@ function ExplorerApp() {
   }, [sessions, activeSessionId, restored]);
 
   useEffect(() => () => {
+    preparationControllerRef.current?.abort();
+    preparationControllerRef.current = null;
     resourcesRef.current.cleanupAll();
     workersRef.current.clear();
   }, []);
@@ -390,6 +396,8 @@ function ExplorerApp() {
       return;
     }
     const controller = new AbortController();
+    preparationControllerRef.current?.abort();
+    preparationControllerRef.current = controller;
     try {
       setIsPreparing(true);
       const handle = await window.showDirectoryPicker({ mode: "read" });
@@ -399,12 +407,14 @@ function ExplorerApp() {
       if (duplicate) {
         setActiveSessionId(duplicate.id);
         controller.abort();
+        preparationControllerRef.current = null;
         setIsPreparing(false);
         return;
       }
       if (sessionsRef.current.length >= MAX_STORE_SESSIONS) {
         setError(t("tabs.limit", { count: MAX_STORE_SESSIONS }));
         controller.abort();
+        preparationControllerRef.current = null;
         setIsPreparing(false);
         return;
       }
@@ -413,6 +423,7 @@ function ExplorerApp() {
       if (!reservation.accepted) {
         setActiveSessionId(id);
         controller.abort();
+        preparationControllerRef.current = null;
         setIsPreparing(false);
         return;
       }
@@ -436,6 +447,7 @@ function ExplorerApp() {
         setSessions((current) => current.map((session) => session.id === id && session.scanToken === reservation.token ? { ...session, result: cached, status: "ready", restored: true, sourceAccess: "granted", scanToken: undefined } : session));
         reservationsRef.current.release(signature, reservation.token);
         resourcesRef.current.cleanup(id);
+        preparationControllerRef.current = null;
         setIsPreparing(false);
         return;
       }
@@ -483,9 +495,11 @@ function ExplorerApp() {
         workersRef.current.delete(id);
       };
       setIsPreparing(false);
+      preparationControllerRef.current = null;
       worker.postMessage({ type: "scan", signature, directoryName: handle.name, files });
     } catch (caught) {
       controller.abort();
+      if (preparationControllerRef.current === controller) preparationControllerRef.current = null;
       setIsPreparing(false);
       if (caught instanceof DOMException && caught.name === "AbortError") return;
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -551,6 +565,16 @@ function ExplorerApp() {
     sessionsRef.current = next.sessions;
     setSessions(next.sessions);
     setActiveSessionId(next.activeSessionId);
+  };
+
+  const cancelActiveWork = () => {
+    if (isPreparing) {
+      preparationControllerRef.current?.abort();
+      preparationControllerRef.current = null;
+      setIsPreparing(false);
+      return;
+    }
+    if (activeSessionId) closeStore(activeSessionId);
   };
 
   return (
@@ -650,7 +674,7 @@ function ExplorerApp() {
           ) : null}
 
           {error || activeSession?.error ? <div className="error-alert"><AlertCircle size={18} /><div><strong>{t("error.title")}</strong><p>{error || activeSession?.error}</p></div></div> : null}
-          {isPreparing || isScanning ? <ScanProgress progress={progress} percentage={percentage} preparing={isPreparing} onCancel={() => activeSessionId && closeStore(activeSessionId)} /> : null}
+          {isPreparing || isScanning ? <ScanProgress progress={progress} percentage={percentage} preparing={isPreparing} onCancel={cancelActiveWork} /> : null}
           {!result && !isScanning && !isPreparing ? <EmptyExplorer onOpen={openDirectory} onDemo={loadDemo} /> : null}
 
           {result && !isScanning ? (
