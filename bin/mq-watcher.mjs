@@ -11,6 +11,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const clientRoot = path.join(packageRoot, "dist", "client");
 const serverEntry = path.join(packageRoot, "dist", "server", "index.js");
+export const DEFAULT_PORT = 38921;
 
 const CONTENT_TYPES = new Map([
   [".css", "text/css; charset=utf-8"],
@@ -35,8 +36,8 @@ async function packageVersion() {
   return metadata.version;
 }
 
-function parseArguments(argv) {
-  const options = { port: process.env.PORT ? parsePort(process.env.PORT) : 0, help: false, version: false };
+export function parseArguments(argv) {
+  const options = { port: process.env.PORT ? parsePort(process.env.PORT) : DEFAULT_PORT, help: false, version: false };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--help" || argument === "-h") options.help = true;
@@ -55,7 +56,7 @@ function helpText() {
     "Usage: mq-watcher [options]",
     "",
     "Options:",
-    "  -p, --port <port>  Loopback port (default: choose an available port)",
+    `  -p, --port <port>  Loopback port (default: ${DEFAULT_PORT}; use 0 for an ephemeral port)`,
     "  -v, --version      Print the package version",
     "  -h, --help         Show this help",
   ].join("\n");
@@ -122,7 +123,7 @@ async function readRequestBody(request, maxBytes = 1024) {
   return Buffer.concat(chunks);
 }
 
-export async function startServer({ port = 0, silent = false } = {}) {
+export async function startServer({ port = DEFAULT_PORT, silent = false } = {}) {
   await stat(serverEntry).catch(() => {
     throw new Error("Built application not found. Run `npm run build` before starting MQ Watcher.");
   });
@@ -172,7 +173,7 @@ export async function startServer({ port = 0, silent = false } = {}) {
   });
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Could not determine the listening address.");
-  const url = `http://localhost:${address.port}`;
+  const url = `http://127.0.0.1:${address.port}`;
   if (!silent) process.stdout.write(`MQ Watcher\nLocal read-only forensic explorer\n\nListening on:\n${url}\n`);
   return { server, url, host: "127.0.0.1", port: address.port };
 }

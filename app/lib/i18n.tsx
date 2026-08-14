@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, type ReactNode, useContext, useEffect, useMemo, useSyncExternalStore } from "react";
 
 export type Locale = "ko" | "en";
 type Variables = Record<string, string | number>;
@@ -12,6 +12,45 @@ const messages: Record<Locale, Record<string, string>> = {
     "tabs.cached": "복원됨",
     "tabs.close": "{name} 탭 닫기",
     "tabs.limit": "동시에 열 수 있는 저장소는 최대 {count}개입니다. 기존 탭을 닫은 뒤 다시 시도해 주세요.",
+    "nav.requiresStore": "저장소를 먼저 열어 주세요. 분석 결과가 준비되면 이 메뉴를 사용할 수 있습니다.",
+    "nav.waitForScan": "저장소를 분석하고 있습니다. 분석이 끝나면 이 메뉴를 사용할 수 있습니다.",
+    "guide.open": "이 화면 사용법",
+    "guide.title": "화면 사용법",
+    "guide.description": "이 화면에서 증거를 읽는 기본 흐름입니다.",
+    "guide.limit": "화살표는 화면에서 확인할 순서를 안내할 뿐, 사건의 시간 순서나 원인 관계를 뜻하지 않습니다.",
+    "guide.overview.source": "열린 저장소 스냅샷",
+    "guide.overview.inspect": "요약 지표와 관찰값",
+    "guide.overview.detail": "관련 목록·상세로 이동",
+    "guide.compare.source": "스냅샷 A와 B",
+    "guide.compare.inspect": "의미 항목별 차이",
+    "guide.compare.detail": "변경 근거 확인",
+    "guide.case.source": "선택한 증거와 가설",
+    "guide.case.inspect": "핀·메모로 조사 정리",
+    "guide.case.detail": "미해결 참조 재확인",
+    "guide.journals.source": "저널 파일 목록",
+    "guide.journals.inspect": "파일별 오프셋·참조",
+    "guide.journals.detail": "보존 질문에 쓸 근거",
+    "guide.timeline.source": "저널별 레코드",
+    "guide.timeline.inspect": "같은 저널 안의 오프셋 순서",
+    "guide.timeline.detail": "개별 증거 위치 확인",
+    "guide.export.source": "파생 분석 결과",
+    "guide.export.inspect": "마스킹·포함 범위 선택",
+    "guide.export.detail": "ZIP과 SHA-256 검증",
+    "guide.destinations.source": "파일에서 관찰한 이름",
+    "guide.destinations.inspect": "Queue·Topic 후보 묶음",
+    "guide.destinations.detail": "발견 위치와 근거 확인",
+    "guide.subscriptions.source": "구독자 형태의 ID",
+    "guide.subscriptions.inspect": "세션·Consumer 후보",
+    "guide.subscriptions.detail": "연결 목적지 확인",
+    "guide.messages.source": "저널 레코드·문자열",
+    "guide.messages.inspect": "메시지 후보 필터링",
+    "guide.messages.detail": "오프셋·ID·HEX 확인",
+    "guide.evidence.source": "ID·목적지·트랜잭션 키",
+    "guide.evidence.inspect": "같은 키의 증거 연결",
+    "guide.evidence.detail": "원본 위치와 한계 확인",
+    "guide.files.source": "저장소 파일 목록",
+    "guide.files.inspect": "파일 유형·크기 분류",
+    "guide.files.detail": "연결된 관찰값 확인",
     "nav.compare": "스냅샷 비교",
     "view.compare.title": "스냅샷 A/B 비교",
     "view.compare.desc": "두 저장소 스냅샷에서 직접 관찰된 항목의 차이를 비교합니다.",
@@ -50,6 +89,8 @@ const messages: Record<Locale, Record<string, string>> = {
     "case.saved": "로컬 저장",
     "case.title": "조사 케이스",
     "case.new": "새 케이스",
+    "case.delete": "케이스 삭제",
+    "case.deleteConfirm": "이 조사 케이스와 메모, 고정한 증거를 삭제하시겠습니까?",
     "case.untitled": "제목 없는 케이스",
     "case.pinCount": "증거 {count}개",
     "case.noteCount": "메모 {count}개",
@@ -63,6 +104,11 @@ const messages: Record<Locale, Record<string, string>> = {
     "case.pinSelected": "현재 선택 항목",
     "case.noSelection": "목적지, 메시지, 구독 또는 파일을 먼저 선택하세요.",
     "case.pin": "증거 고정",
+    "case.pickEvidence": "고정할 증거 찾기",
+    "case.pickEvidenceBody": "현재 저장소의 목적지, 구독, 메시지, 증거 연결과 파일을 검색해 케이스에 바로 고정합니다.",
+    "case.pickEvidencePlaceholder": "ID, 목적지, 저널 또는 파일 검색",
+    "case.noEvidenceMatch": "검색 조건에 맞는 증거가 없습니다.",
+    "case.pinDirect": "고정",
     "case.evidence": "사용자 선택",
     "case.pins": "고정한 증거",
     "case.noPins": "아직 고정한 증거가 없습니다.",
@@ -115,6 +161,8 @@ const messages: Record<Locale, Record<string, string>> = {
     "journal.notObserved": "관찰되지 않음",
     "journal.noReferences": "이 파서 범위에서 연결된 증거 참조가 관찰되지 않았습니다.",
     "journal.detailLimit": "참조가 없다는 표시는 브로커 내부 참조가 없거나 파일을 삭제해도 된다는 뜻이 아닙니다.",
+    "journal.referencesShown": "전체 {total}건 중 {shown}건 표시",
+    "journal.loadMore": "다음 {count}건 이어서 보기",
     "nav.timeline": "증거 타임라인",
     "view.timeline.title": "증거 타임라인",
     "view.timeline.desc": "저널별로 구조화 레코드를 묶고, 각 저널 안에서만 오프셋 순서로 나열합니다.",
@@ -411,6 +459,45 @@ const messages: Record<Locale, Record<string, string>> = {
     "tabs.cached": "restored",
     "tabs.close": "Close {name}",
     "tabs.limit": "You can open up to {count} stores at once. Close an existing tab and try again.",
+    "nav.requiresStore": "Open a Store first. This menu is available after analysis results are ready.",
+    "nav.waitForScan": "The Store is still being analyzed. This menu will be available when analysis finishes.",
+    "guide.open": "How to use this view",
+    "guide.title": "View guide",
+    "guide.description": "A basic path for reading evidence in this view.",
+    "guide.limit": "Arrows show a reading path in the UI; they do not assert event order or causality.",
+    "guide.overview.source": "Open Store snapshot",
+    "guide.overview.inspect": "Summary metrics and observations",
+    "guide.overview.detail": "Open related lists and details",
+    "guide.compare.source": "Snapshots A and B",
+    "guide.compare.inspect": "Differences by semantic entity",
+    "guide.compare.detail": "Review supporting evidence",
+    "guide.case.source": "Selected evidence and hypothesis",
+    "guide.case.inspect": "Organize pins and notes",
+    "guide.case.detail": "Recheck unresolved references",
+    "guide.journals.source": "Journal file list",
+    "guide.journals.inspect": "Offsets and references by file",
+    "guide.journals.detail": "Evidence for retention questions",
+    "guide.timeline.source": "Records grouped by journal",
+    "guide.timeline.inspect": "Offset order within one journal",
+    "guide.timeline.detail": "Inspect an evidence location",
+    "guide.export.source": "Derived analysis result",
+    "guide.export.inspect": "Choose redaction and scope",
+    "guide.export.detail": "Verify ZIP and SHA-256",
+    "guide.destinations.source": "Names observed in files",
+    "guide.destinations.inspect": "Queue and Topic candidates",
+    "guide.destinations.detail": "Review source and evidence",
+    "guide.subscriptions.source": "Consumer-shaped identifiers",
+    "guide.subscriptions.inspect": "Session and Consumer candidates",
+    "guide.subscriptions.detail": "Review related destination",
+    "guide.messages.source": "Journal records and strings",
+    "guide.messages.inspect": "Filter message candidates",
+    "guide.messages.detail": "Review offset, ID, and HEX",
+    "guide.evidence.source": "ID, destination, and transaction keys",
+    "guide.evidence.inspect": "Links sharing the same key",
+    "guide.evidence.detail": "Review provenance and limits",
+    "guide.files.source": "Store file inventory",
+    "guide.files.inspect": "File type and size classification",
+    "guide.files.detail": "Review linked observations",
     "nav.compare": "Snapshot compare",
     "view.compare.title": "Snapshot A/B comparison",
     "view.compare.desc": "Compare differences directly observed in two store snapshots.",
@@ -449,6 +536,8 @@ const messages: Record<Locale, Record<string, string>> = {
     "case.saved": "Saved locally",
     "case.title": "Investigation cases",
     "case.new": "New case",
+    "case.delete": "Delete case",
+    "case.deleteConfirm": "Delete this investigation case, its notes, and pinned evidence?",
     "case.untitled": "Untitled case",
     "case.pinCount": "{count} evidence pins",
     "case.noteCount": "{count} notes",
@@ -462,6 +551,11 @@ const messages: Record<Locale, Record<string, string>> = {
     "case.pinSelected": "Current selection",
     "case.noSelection": "Select a destination, message, subscription, or file first.",
     "case.pin": "Pin evidence",
+    "case.pickEvidence": "Find evidence to pin",
+    "case.pickEvidenceBody": "Search destinations, subscriptions, messages, evidence links, and files in the current Store and pin them directly.",
+    "case.pickEvidencePlaceholder": "Search an ID, destination, journal, or file",
+    "case.noEvidenceMatch": "No evidence matches the search.",
+    "case.pinDirect": "Pin",
     "case.evidence": "User selected",
     "case.pins": "Pinned evidence",
     "case.noPins": "No evidence is pinned yet.",
@@ -514,6 +608,8 @@ const messages: Record<Locale, Record<string, string>> = {
     "journal.notObserved": "Not observed",
     "journal.noReferences": "No linked evidence reference was observed within this parser's scope.",
     "journal.detailLimit": "No observed reference does not mean there are no broker-internal references or that the file is safe to remove.",
+    "journal.referencesShown": "Showing {shown} of {total}",
+    "journal.loadMore": "Load next {count}",
     "nav.timeline": "Evidence timeline",
     "view.timeline.title": "Evidence Timeline",
     "view.timeline.desc": "Group structured records by journal and order offsets only within each journal.",
@@ -725,12 +821,34 @@ type I18nValue = {
 };
 
 const I18nContext = createContext<I18nValue | null>(null);
+const LOCALE_STORAGE_KEY = "mq-watcher-locale";
+const LOCALE_CHANGE_EVENT = "mq-watcher-locale-change";
+
+function readLocale(): Locale {
+  const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
+  return stored === "ko" ? "ko" : "en";
+}
+
+function subscribeLocale(onStoreChange: () => void) {
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === LOCALE_STORAGE_KEY) onStoreChange();
+  };
+  window.addEventListener("storage", onStorage);
+  window.addEventListener(LOCALE_CHANGE_EVENT, onStoreChange);
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    window.removeEventListener(LOCALE_CHANGE_EVENT, onStoreChange);
+  };
+}
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocale] = useState<Locale>("ko");
+  const locale = useSyncExternalStore<Locale>(subscribeLocale, readLocale, (): Locale => "en");
+  const setLocale = (next: Locale) => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, next);
+    window.dispatchEvent(new Event(LOCALE_CHANGE_EVENT));
+  };
   useEffect(() => {
     document.documentElement.lang = locale;
-    localStorage.setItem("mq-watcher-locale", locale);
   }, [locale]);
   const value = useMemo<I18nValue>(() => ({
     locale,

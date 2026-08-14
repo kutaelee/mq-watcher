@@ -81,8 +81,8 @@ function assertInside(parent, child) {
   assert.ok(relative && !relative.startsWith("..") && !path.isAbsolute(relative), `${child} is outside ${parent}`);
 }
 
-async function smokeServer(command, environment) {
-  const child = spawnOwned(command, ["--no-open", "--port", "0"], environment);
+async function smokeServer(command, environment, args = ["--no-open", "--port", "0"]) {
+  const child = spawnOwned(command, args, environment);
   let stdout = "";
   let stderr = "";
   child.stdout.setEncoding("utf8");
@@ -169,6 +169,10 @@ try {
   assert.equal(existsSync(extraFile), false);
 
   const server = await smokeServer(executable, environment);
+  const stableFirst = await smokeServer(executable, environment, ["--no-open"]);
+  const stableSecond = await smokeServer(executable, environment, ["--no-open"]);
+  assert.equal(stableFirst.url, "http://127.0.0.1:38921");
+  assert.equal(stableSecond.url, stableFirst.url, "Portable restarts must preserve the browser origin");
   const cacheEntries = await readdir(path.dirname(cache));
   assert.equal(cacheEntries.some((entry) => /\.(tmp|lock|invalid|stale)$/.test(entry)), false);
   process.stdout.write(`${JSON.stringify({
@@ -180,6 +184,10 @@ try {
     markerSelfHeal: true,
     assetSelfHeal: true,
     extraFileSelfHeal: true,
+    stableOriginRestart: {
+      first: stableFirst.url,
+      second: stableSecond.url,
+    },
     upgradeDowngrade: previousEvidence ? {
       previousVersion: previousEvidence.version,
       previousCache: previousEvidence.cache,

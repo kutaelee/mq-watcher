@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { chmod, copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -10,8 +11,8 @@ const outputRoot = path.join(repositoryRoot, "outputs");
 const executableName = process.platform === "win32" ? "mq-watcher.exe" : "mq-watcher";
 const runtimePackages = ["react", "react-dom", "scheduler"];
 
-function run(command, args) {
-  const result = spawnSync(command, args, { cwd: repositoryRoot, encoding: "utf8", stdio: "pipe", maxBuffer: 16 * 1024 * 1024 });
+function run(command, args, cwd = repositoryRoot) {
+  const result = spawnSync(command, args, { cwd, encoding: "utf8", stdio: "pipe", maxBuffer: 16 * 1024 * 1024 });
   if (result.status !== 0) throw new Error(`${command} failed (${result.status})\n${result.stdout || ""}\n${result.stderr || ""}`);
   if (result.stdout) process.stdout.write(result.stdout);
   if (result.stderr) process.stderr.write(result.stderr);
@@ -19,6 +20,18 @@ function run(command, args) {
 
 function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
+}
+
+function assertNoPrivateBuildPaths(bytes) {
+  const binaryText = bytes.toString("latin1").toLowerCase();
+  const privateRoots = new Set([repositoryRoot, homedir()]);
+  for (const privateRoot of privateRoots) {
+    for (const candidate of [privateRoot, privateRoot.replaceAll("\\", "/")]) {
+      if (candidate && binaryText.includes(candidate.toLowerCase())) {
+        throw new Error(`Portable executable contains a private build path: ${candidate}`);
+      }
+    }
+  }
 }
 
 async function collectFiles(root, prefix) {
@@ -63,10 +76,12 @@ async function main() {
   const manifestFile = path.join(workRoot, "app-manifest.json");
   await writeFile(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`);
 
+  const seaEntryFile = path.join(workRoot, "sea-entry.cjs");
+  await copyFile(path.join(repositoryRoot, "portable", "sea-entry.cjs"), seaEntryFile);
   const blob = path.join(workRoot, "mq-watcher.blob");
   const config = {
-    main: path.join(repositoryRoot, "portable", "sea-entry.cjs"),
-    output: blob,
+    main: "sea-entry.cjs",
+    output: "mq-watcher.blob",
     disableExperimentalSEAWarning: true,
     useSnapshot: false,
     useCodeCache: false,
@@ -77,7 +92,7 @@ async function main() {
   };
   const configFile = path.join(workRoot, "sea-config.json");
   await writeFile(configFile, `${JSON.stringify(config, null, 2)}\n`);
-  run(process.execPath, ["--experimental-sea-config", configFile]);
+  run(process.execPath, ["--experimental-sea-config", configFile], workRoot);
 
   const executable = path.join(outputRoot, executableName);
   await copyFile(process.execPath, executable);
@@ -91,6 +106,7 @@ async function main() {
     "NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2",
   ]);
   const executableBytes = await readFile(executable);
+  assertNoPrivateBuildPaths(executableBytes);
   process.stdout.write(`${JSON.stringify({ executable, version: packageMetadata.version, size: executableBytes.length, sha256: sha256(executableBytes), assets: files.length }, null, 2)}\n`);
 }
 

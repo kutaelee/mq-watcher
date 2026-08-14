@@ -18,6 +18,20 @@ MQ Watcher는 구조에 따라 해석된 값, 파일에서 직접 관찰된 값,
 
 **설치할 필요가 없으며 Node.js도 필요하지 않습니다.**
 
+## 화면으로 살펴보기
+
+아래 영상은 저장소에 함께 들어 있는 합성 Advisory 시나리오만 사용합니다. 고객 데이터나 브로커 연결 없이 조사 흐름을 보여줍니다.
+
+![MQ Watcher 한국어 사용 예시](docs/media/ko/mq-watcher-walkthrough.gif)
+
+[MP4 사용 예시 보기](docs/media/ko/mq-watcher-walkthrough.mp4) · [한국어 전체 기능 사용 가이드 열기](docs/user-guide.ko.md)
+
+| 두 스냅샷 비교 | 로컬 조사 케이스 작성 |
+| --- | --- |
+| ![합성 증거 스냅샷 비교](docs/screenshots/ko/snapshot-compare.png) | ![선택 가능한 증거가 있는 조사 케이스](docs/screenshots/ko/incident-case.png) |
+
+각 분석 화면에는 **이 화면 사용법** 버튼이 있습니다. 세 단계 그림으로 읽는 흐름을 안내하고, 해당 화면만으로 증명할 수 없는 내용도 함께 밝힙니다.
+
 ## 주요 기능
 
 - 한국어와 영어를 지원하는 ActiveMQ 저장소 증거 탐색 UI
@@ -69,7 +83,7 @@ GitHub Release에서 `mq-watcher-windows-x64.zip`과 `SHA256SUMS.txt`를 내려�
 mq-watcher.exe
 ```
 
-실행 파일은 `127.0.0.1`에만 바인딩된 로컬 서버를 사용 가능한 포트에서 시작하고 브라우저를 엽니다. 브라우저 자동 실행을 막으려면 `--no-open`을 사용합니다. 패키징된 애플리케이션은 `%LOCALAPPDATA%\MQ Watcher\Cache\<version-hash>` 아래에 검증 후 압축 해제되며, 사용자가 선택한 브로커 저장소는 이 캐시로 복사되지 않습니다. 현재 배포 파일에는 코드 서명이 없으므로 Windows SmartScreen 경고가 나타날 수 있습니다.
+실행 파일은 `http://127.0.0.1:38921`에만 바인딩된 로컬 서버를 시작하고 브라우저를 엽니다. 주소가 고정되어 브라우저에 로컬 저장된 열린 저장소, 캐시 분석, 조사 케이스, 언어와 화면 상태가 실행 파일을 재시작해도 복원됩니다. 브라우저 자동 실행을 막으려면 `--no-open`, 의도적으로 일회성 작업공간을 쓰려면 `--port 0`을 사용합니다. 패키징된 애플리케이션은 `%LOCALAPPDATA%\MQ Watcher\Cache\<version-hash>` 아래에 검증 후 압축 해제되며, 사용자가 선택한 브로커 저장소는 이 캐시로 복사되지 않습니다. 현재 배포 파일에는 코드 서명이 없으므로 Windows SmartScreen 경고가 나타날 수 있습니다.
 
 ### 업데이트
 
@@ -93,7 +107,7 @@ npm run build
 node bin/mq-watcher.mjs
 ```
 
-출력된 `http://localhost:<port>` 주소를 열어 사용합니다. 로컬 파일을 선택하지 않고 공개 fixture를 살펴보려면 **합성 예시 보기**를 선택합니다.
+출력된 `http://127.0.0.1:38921` 주소를 열어 사용합니다. 로컬 파일을 선택하지 않고 공개 fixture를 살펴보려면 **합성 예시 보기**를 선택합니다.
 
 npm 패키지는 배포 가능한 상태이지만 현재 저장소의 자동화 작업에서는 아직 npm registry에 배포하지 않습니다. 별도 승인 후 registry에 배포되면 다음 명령으로 실행하는 구성을 목표로 합니다.
 
@@ -126,15 +140,11 @@ npx mq-watcher
 
 ## 화면 예시
 
-모든 화면은 저장소에 포함된 합성 fixture를 사용했습니다. 실제 운영 데이터는 포함하지 않습니다.
+모든 화면과 영상은 저장소에 포함된 합성 fixture를 사용했습니다. 실제 운영 데이터는 포함하지 않습니다. 화면별 사용 순서와 예시는 [한국어 전체 기능 사용 가이드](docs/user-guide.ko.md)에서 확인할 수 있습니다.
 
-![읽기 전용 합성 예시 시작 화면](docs/screenshots/ko/overview.png)
-
-![합성 데이터의 증거 연결 화면](docs/screenshots/ko/evidence-links.png)
-
-![증거 참조 상세 화면](docs/screenshots/ko/evidence-detail.png)
-
-![조사 워크벤치 증거 타임라인](docs/screenshots/ko/workbench-timeline.png)
+| 저널 참조 이어보기 | 화면별 그림 안내 |
+| --- | --- |
+| ![160개 중 150개 참조를 불러온 저널 상세](docs/screenshots/ko/journal-progressive.png) | ![개요 화면의 세 단계 그림 안내](docs/screenshots/ko/view-guide.png) |
 
 ## 사용 흐름
 
@@ -200,7 +210,7 @@ npm run test:portable
 npm pack --dry-run
 ```
 
-CI는 설정된 Windows와 Ubuntu 작업에서 설치, lint, 엄격한 타입 검사, build, 전체 테스트, fixture 테스트, 브로커 fixture 테스트, 포터블 캐시 테스트와 실제 Chromium IndexedDB 마이그레이션 테스트를 실행합니다. 태그 빌드는 단독 실행 파일을 다시 빌드하고 smoke test를 통과한 뒤 압축 파일과 `SHA256SUMS.txt`를 배포합니다. v0.3 워크벤치의 검증 근거와 아직 남아 있는 릴리스 조건은 [v0.3 검증 기록](docs/validation/v0.3-investigation-workbench.md)에 정리되어 있습니다.
+CI는 설정된 Windows와 Ubuntu 작업에서 설치, lint, 엄격한 타입 검사, build, 전체 테스트, fixture 테스트, 브로커 fixture 테스트, 포터블 캐시 테스트와 실제 Chromium IndexedDB 마이그레이션 테스트를 실행합니다. 태그 빌드는 단독 실행 파일을 다시 빌드하고 smoke test를 통과한 뒤 압축 파일과 `SHA256SUMS.txt`를 배포합니다. 완료된 [v0.3 워크벤치 검증](docs/validation/v0.3-investigation-workbench.md)과 현재 [v0.3.1 사용성 검증](docs/validation/v0.3.1-usability.md)을 참고하십시오.
 
 ## 라이선스
 

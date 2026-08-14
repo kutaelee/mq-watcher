@@ -18,6 +18,20 @@ This is an independent open-source tool. It is not affiliated with or supported 
 
 **No installation. No Node.js required.**
 
+## Guided tour
+
+The walkthrough below uses only the committed synthetic Advisory scenario. It shows the investigation flow without customer data or a connection to a broker.
+
+![MQ Watcher English walkthrough](docs/media/en/mq-watcher-walkthrough.gif)
+
+[Watch the MP4 walkthrough](docs/media/en/mq-watcher-walkthrough.mp4) · [Open the complete English feature guide](docs/user-guide.md)
+
+| Compare two snapshots | Build a local incident case |
+| --- | --- |
+| ![Snapshot comparison with synthetic evidence](docs/screenshots/en/snapshot-compare.png) | ![Incident case with selectable evidence](docs/screenshots/en/incident-case.png) |
+
+Each analysis page includes **How to use this view**, a three-step visual reading path, and an explicit statement of what the page does not prove.
+
 ## What it is
 
 - A Korean/English browser UI for local ActiveMQ store evidence
@@ -69,7 +83,7 @@ Download `mq-watcher-windows-x64.zip` from the GitHub Release, verify it against
 mq-watcher.exe
 ```
 
-The executable starts a server bound only to `127.0.0.1`, chooses an available port, and opens the browser. Use `--no-open` to suppress browser launch. The packaged application is verified and extracted under `%LOCALAPPDATA%\MQ Watcher\Cache\<version-hash>`; selected broker stores are not copied into that cache. The release executable is currently unsigned, so Windows SmartScreen may show a warning.
+The executable starts a server bound only to `http://127.0.0.1:38921` and opens the browser. The stable origin lets browser-local sessions, cached analysis, cases, language, and UI state survive executable restarts. Use `--no-open` to suppress browser launch or `--port 0` for an intentionally ephemeral workspace. The packaged application is verified and extracted under `%LOCALAPPDATA%\MQ Watcher\Cache\<version-hash>`; selected broker stores are not copied into that cache. The release executable is currently unsigned, so Windows SmartScreen may show a warning.
 
 ### Updates
 
@@ -93,7 +107,7 @@ npm run build
 node bin/mq-watcher.mjs
 ```
 
-Open the printed `http://localhost:<port>` URL. Choose **Load synthetic demo** to explore public fixture evidence without selecting local files.
+Open the printed `http://127.0.0.1:38921` URL. Choose **Load synthetic demo** to explore public fixture evidence without selecting local files.
 
 The npm package is publish-ready but has not been published by this repository workflow. After a separately approved registry release, the intended command is:
 
@@ -126,15 +140,11 @@ The structured byte rules and official source links are documented in [Structure
 
 ## Screenshots
 
-All screenshots use the committed synthetic fixture. They contain no customer or operating data.
+All screenshots and videos use the committed synthetic fixture. They contain no customer or operating data. See the [complete English feature guide](docs/user-guide.md) for page-by-page instructions and examples.
 
-![Read-only synthetic demo entry point](docs/screenshots/en/overview.png)
-
-![Synthetic evidence links](docs/screenshots/en/evidence-links.png)
-
-![Evidence reference detail](docs/screenshots/en/evidence-detail.png)
-
-![Investigation Workbench evidence timeline](docs/screenshots/en/workbench-timeline.png)
+| Journal references with progressive loading | Visual page guide |
+| --- | --- |
+| ![Journal reference detail with 150 of 160 references loaded](docs/screenshots/en/journal-progressive.png) | ![Three-step visual guide for the overview](docs/screenshots/en/view-guide.png) |
 
 ## Example workflow
 
@@ -200,7 +210,7 @@ npm run test:portable
 npm pack --dry-run
 ```
 
-CI runs install, lint, strict type checking, build, the full test suite, fixture tests, broker-fixture tests, portable-cache tests, and the real Chromium IndexedDB migration test on Windows and Ubuntu where configured. Tag builds also rebuild and smoke-test the standalone executables before publishing archives and `SHA256SUMS.txt`. The v0.3 workbench evidence and still-pending release gates are recorded in [v0.3 validation](docs/validation/v0.3-investigation-workbench.md).
+CI runs install, lint, strict type checking, build, the full test suite, fixture tests, broker-fixture tests, portable-cache tests, and the real Chromium IndexedDB migration test on Windows and Ubuntu where configured. Tag builds also rebuild and smoke-test the standalone executables before publishing archives and `SHA256SUMS.txt`. See the completed [v0.3 workbench validation](docs/validation/v0.3-investigation-workbench.md) and the current [v0.3.1 usability validation](docs/validation/v0.3.1-usability.md).
 
 ## License
 

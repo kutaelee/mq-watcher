@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { startServer } from "../bin/mq-watcher.mjs";
+import { DEFAULT_PORT, parseArguments, startServer } from "../bin/mq-watcher.mjs";
 import { RELEASE_API_URL } from "../app/lib/updater.mjs";
+
+test("CLI uses a stable default origin and keeps ephemeral ports opt-in", () => {
+  assert.equal(DEFAULT_PORT, 38921);
+  assert.equal(parseArguments([]).port, DEFAULT_PORT);
+  assert.equal(parseArguments(["--port", "0"]).port, 0);
+});
 
 test("CLI server binds to loopback and serves the application and worker modules", async (context) => {
   const realFetch = globalThis.fetch;

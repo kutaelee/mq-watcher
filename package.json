@@ -1,6 +1,6 @@
 {
   "name": "mq-watcher",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Local read-only ActiveMQ Classic store evidence explorer",
   "license": "MIT",
   "repository": {
@@ -42,6 +42,8 @@
     "test:fixtures": "node --test tests/fixtures.test.mjs",
     "test:broker-fixtures": "node --test tests/broker-fixtures.test.mjs",
     "fixtures:generate": "node scripts/generate-synthetic-fixtures.mjs",
+    "demo:generate": "node scripts/generate-demo-scenario.mjs",
+    "docs:media": "node scripts/build-doc-media.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "validate:store": "node scripts/validate-store.mjs",
     "prepack": "npm run build"

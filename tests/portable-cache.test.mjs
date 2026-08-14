@@ -8,7 +8,20 @@ import { createRequire } from "node:module";
 import test from "node:test";
 
 const require = createRequire(import.meta.url);
-const { digest, extractApplication, validateExtracted, validateManifest } = require("../portable/sea-entry.cjs");
+const { DEFAULT_PORT, digest, extractApplication, parseArguments, validateExtracted, validateManifest } = require("../portable/sea-entry.cjs");
+
+test("portable executable uses a stable default origin and keeps ephemeral ports opt-in", () => {
+  assert.equal(DEFAULT_PORT, 38921);
+  assert.equal(parseArguments([]).port, DEFAULT_PORT);
+  assert.equal(parseArguments(["--port", "0"]).port, 0);
+});
+
+test("portable SEA build uses a neutral entry path and rejects private build-path leakage", async () => {
+  const source = await readFile(new URL("../scripts/build-portable.mjs", import.meta.url), "utf8");
+  assert.match(source, /main: "sea-entry\.cjs"/u);
+  assert.match(source, /assertNoPrivateBuildPaths\(executableBytes\)/u);
+  assert.doesNotMatch(source, /main: path\.join\(repositoryRoot/u);
+});
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");

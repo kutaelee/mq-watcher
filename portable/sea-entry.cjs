@@ -27,6 +27,7 @@ const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 const CACHE_LOCK_TIMEOUT_MS = 30_000;
 const CACHE_LOCK_STALE_MS = 10 * 60_000;
+const DEFAULT_PORT = 38921;
 
 function parsePort(value) {
   const port = Number(value);
@@ -35,7 +36,7 @@ function parsePort(value) {
 }
 
 function parseArguments(argv) {
-  const options = { port: 0, open: true, help: false, version: false, cacheInfo: false };
+  const options = { port: DEFAULT_PORT, open: true, help: false, version: false, cacheInfo: false };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--help" || argument === "-h") options.help = true;
@@ -56,7 +57,7 @@ function helpText() {
     "Usage: mq-watcher.exe [options]",
     "",
     "Options:",
-    "  -p, --port <port>  Loopback port (default: choose an available port)",
+    `  -p, --port <port>  Loopback port (default: ${DEFAULT_PORT}; use 0 for an ephemeral port)`,
     "      --no-open       Do not open the browser automatically",
     "      --cache-info    Print the packaged application cache location",
     "  -v, --version      Print the application version",
@@ -412,4 +413,4 @@ if (sea.isSea() || require.main === module) {
   });
 }
 
-module.exports = { digest, extractApplication, validateExtracted, validateManifest };
+module.exports = { DEFAULT_PORT, digest, extractApplication, parseArguments, validateExtracted, validateManifest };

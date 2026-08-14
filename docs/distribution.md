@@ -8,11 +8,13 @@ After an npm release is explicitly approved and published:
 npx mq-watcher
 ```
 
-The CLI chooses an available port, binds only to `127.0.0.1`, and prints the local URL. To request a specific loopback port:
+The CLI binds only to `127.0.0.1` and uses the stable default URL `http://127.0.0.1:38921`. Keeping the origin stable lets browser IndexedDB restore open Store sessions, cached analysis, language, and UI state after the process restarts. To request a different loopback port:
 
 ```bash
 npx mq-watcher --port 3000
 ```
+
+Use `--port 0` only when an ephemeral port is intentional, such as an isolated smoke test. Browser storage is scoped to the exact origin, so a custom port has a separate local workspace.
 
 Until a package is published, use a source checkout:
 

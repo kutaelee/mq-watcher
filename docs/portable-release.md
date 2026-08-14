@@ -12,7 +12,7 @@ At startup the executable:
 4. publishes the cache under a lock and verifies an existing cache before reuse;
 5. quarantines and recreates a corrupt or incomplete cache instead of trusting it;
 6. imports the extracted production server;
-7. binds an HTTP listener explicitly to `127.0.0.1` on an available port;
+7. binds an HTTP listener explicitly to `127.0.0.1:38921` by default;
 8. opens the default browser unless `--no-open` is supplied.
 
 Cache locations:
@@ -21,6 +21,8 @@ Cache locations:
 - Linux: `${XDG_CACHE_HOME:-~/.cache}/mq-watcher/<version-hash>`
 
 The cache contains packaged application code and static assets only. Selected ActiveMQ Store files remain behind browser read-only handles and are not copied to the application cache. Different application versions use isolated cache keys, so an upgrade or downgrade does not reinterpret an older cache directory as the current package.
+
+Workbench sessions, cached analysis, cases, language, and UI state are stored by the browser for the exact loopback origin. The stable default `http://127.0.0.1:38921` therefore preserves them across executable restarts. Clearing browser site data, changing the host/port, or using `--port 0` opens a separate browser workspace. Data created by older releases on random ports cannot be discovered automatically because browsers isolate one origin from another.
 
 ## Update behavior
 
@@ -44,8 +46,8 @@ This is a supply-chain boundary, not code signing. Windows binaries are currentl
 
 ## Release smoke tests
 
-Release CI starts each newly built executable with `--no-open --port 0`, waits for the printed loopback URL, requests `/`, requires HTTP 200 and the expected HTML title, and terminates the exact child process. Only after that check does CI create the ZIP/tar archive and `SHA256SUMS.txt`.
+Release CI starts each newly built executable with `--no-open --port 0`, waits for the printed loopback URL, requests `/`, requires HTTP 200 and the expected HTML title, and terminates the exact child process. A separate restart smoke uses the default port twice and requires the same origin both times. Only after those checks does CI create the ZIP/tar archive and `SHA256SUMS.txt`.
 
 Portable cache tests cover fail-closed manifest validation, corrupt-cache self-healing, isolated v0.2/v0.3 cache keys, and concurrent cold extraction. Updater tests cover strict version selection, same-origin authorization, redirect/size/hash failures, cancellation cleanup, successful Windows replacement, rollback and restart, and post-staging tamper rejection using command fixtures.
 
-The final v0.3 release gate additionally requires a real v0.2 executable → real v0.3 executable → real v0.2 executable smoke test and tag-triggered CI. Until those are recorded as complete in [v0.3 validation](validation/v0.3-investigation-workbench.md), this document does not claim the v0.3 release has passed.
+The v0.3.0 release completed the real v0.2 → v0.3 → v0.2 executable transition, PR/main CI, tag workflow, portable smoke, and published-asset digest checks recorded in [v0.3 validation](validation/v0.3-investigation-workbench.md). Each later release candidate must repeat the applicable final-HEAD CI, portable smoke, tag workflow, and published-asset checks; current v0.3.1 evidence is tracked separately in [v0.3.1 usability validation](validation/v0.3.1-usability.md).

@@ -102,6 +102,7 @@ type Selected =
 
 type ContextHelp = { title: string; body: string; classes: string[] };
 type Translator = (key: string, variables?: Record<string, string | number>) => string;
+type PinCandidate = Omit<CasePin, "pinnedAt">;
 
 type StoreSession = {
   id: string;
@@ -274,6 +275,34 @@ function makePinCandidate(selected: Selected, result: ScanResult | null): Omit<C
   return { ...base, id: selected.value.path, semanticKey: `source-file:${selected.value.path}`, kind: selected.type, label: selected.value.path, provenance: { file: selected.value.path, offset: null }, confidence: selected.value.confidence };
 }
 
+function buildPinCandidates(result: ScanResult): PinCandidate[] {
+  const selections: Selected[] = [
+    ...result.destinations.map((value) => ({ type: "destination" as const, value })),
+    ...result.subscriptions.map((value) => ({ type: "subscription" as const, value })),
+    ...result.messages.map((value) => ({ type: "message" as const, value })),
+    ...result.correlation.links.map((value) => ({ type: "correlation" as const, value })),
+    ...result.files.map((value) => ({ type: "file" as const, value })),
+  ];
+  return selections.flatMap((selection) => {
+    const candidate = makePinCandidate(selection, result);
+    return candidate ? [candidate] : [];
+  });
+}
+
+function ViewGuideDialog({ view, open, onOpenChange }: { view: ViewId; open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { t } = useI18n();
+  const ViewIcon = NAVIGATION.find((item) => item.id === view)?.icon ?? FileSearch;
+  const nodes = [
+    { icon: HardDrive, label: t(`guide.${view}.source`) },
+    { icon: ViewIcon, label: t(`guide.${view}.inspect`) },
+    { icon: PanelRightOpen, label: t(`guide.${view}.detail`) },
+  ];
+  return <Dialog open={open} onOpenChange={onOpenChange} title={`${t(`view.${view}.title`)} · ${t("guide.title")}`} description={t("guide.description")}>
+    <div className="view-guide-flow">{nodes.map(({ icon: Icon, label }, index) => <Fragment key={label}><div className="view-guide-node"><span>{index + 1}</span><Icon size={22} /><strong>{label}</strong></div>{index < nodes.length - 1 ? <ChevronRight className="view-guide-arrow" size={22} /> : null}</Fragment>)}</div>
+    <div className="best-effort view-guide-limit"><Info size={15} /><span>{t("guide.limit")}</span></div>
+  </Dialog>;
+}
+
 async function collectDirectoryFiles(handle: FileSystemDirectoryHandle, signal?: AbortSignal) {
   const collected: FileInput[] = [];
   async function walk(directory: FileSystemDirectoryHandle, prefix: string) {
@@ -307,7 +336,9 @@ function ExplorerApp() {
   const [isPreparing, setIsPreparing] = useState(false);
   const [error, setError] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [toast, setToast] = useState("");
   const [detailOpen, setDetailOpen] = useState(true);
   const [dark, setDark] = useState(false);
   const workersRef = useRef(new Map<string, Worker>());
@@ -315,6 +346,8 @@ function ExplorerApp() {
   const sessionsRef = useRef<StoreSession[]>(sessions);
   const reservationsRef = useRef(new SignatureReservationRegistry());
   const resourcesRef = useRef(new SessionResourceLedger());
+  const toastTimerRef = useRef<number | null>(null);
+  const demoLoadingRef = useRef(false);
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? null;
   const result = activeSession?.result ?? null;
   const activeView = activeSession?.activeView ?? "overview";
@@ -384,6 +417,7 @@ function ExplorerApp() {
     preparationControllerRef.current = null;
     resourcesRef.current.cleanupAll();
     workersRef.current.clear();
+    if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
   }, []);
 
   const percentage = progress.totalBytes
@@ -523,28 +557,33 @@ function ExplorerApp() {
   };
 
   const loadDemo = async () => {
+    if (demoLoadingRef.current) return;
+    demoLoadingRef.current = true;
     setError("");
     try {
-      const response = await fetch("/demo-result.json", { cache: "no-store" });
+      const response = await fetch("/demo-scenario.json", { cache: "no-store" });
       if (!response.ok) throw new Error(t("error.demo"));
-      const demo = await response.json() as ScanResult;
-      const duplicate = findReusableSession(sessions, demo.signature);
-      if (duplicate) {
-        setActiveSessionId(duplicate.id);
+      const scenario = await response.json() as { snapshots: ScanResult[] };
+      const current = sessionsRef.current;
+      const available = scenario.snapshots.filter((demo) => !findReusableSession(current, demo.signature)).slice(0, Math.max(0, MAX_STORE_SESSIONS - current.length));
+      if (!available.length) {
+        const existing = scenario.snapshots.map((demo) => findReusableSession(current, demo.signature)).find(Boolean);
+        if (existing) setActiveSessionId(existing.id);
+        else setError(t("tabs.limit", { count: MAX_STORE_SESSIONS }));
         return;
       }
-      if (sessions.length >= MAX_STORE_SESSIONS) {
-        setError(t("tabs.limit", { count: MAX_STORE_SESSIONS }));
-        return;
-      }
-      const id = sessionId(demo.signature);
-      setSessions((current) => [...current, {
-        id, signature: demo.signature, name: demo.directoryName, result: demo, activeView: "overview", selected: null,
-        status: "ready", progress: EMPTY_PROGRESS, error: "", openedAt: new Date().toISOString(), restored: false, sourceAccess: "cached-only",
-      }]);
-      setActiveSessionId(id);
+      const additions = available.map((demo) => ({
+        id: sessionId(demo.signature), signature: demo.signature, name: demo.directoryName, result: demo, activeView: "overview" as ViewId, selected: null,
+        status: "ready" as const, progress: EMPTY_PROGRESS, error: "", openedAt: new Date().toISOString(), restored: false, sourceAccess: "cached-only" as const,
+      }));
+      const next = [...current, ...additions];
+      sessionsRef.current = next;
+      setSessions(next);
+      setActiveSessionId(additions.at(-1)?.id ?? null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      demoLoadingRef.current = false;
     }
   };
 
@@ -554,6 +593,15 @@ function ExplorerApp() {
   };
 
   const navigate = (view: ViewId) => {
+    if (!result) {
+      if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
+      setToast(isPreparing || isScanning ? t("nav.waitForScan") : t("nav.requiresStore"));
+      toastTimerRef.current = window.setTimeout(() => {
+        setToast("");
+        toastTimerRef.current = null;
+      }, 3200);
+      return;
+    }
     setActiveView(view);
     if (view === "overview") setSelected(null);
   };
@@ -644,7 +692,7 @@ function ExplorerApp() {
 
         <nav className="nav-list" aria-label={t("source.label")}>
           {NAVIGATION.map(({ id, icon: Icon }) => (
-            <button key={id} className={`nav-item ${activeView === id ? "active" : ""}`} onClick={() => navigate(id)}>
+            <button key={id} className={`nav-item ${activeView === id ? "active" : ""} ${!result ? "unavailable" : ""}`} onClick={() => navigate(id)}>
               <Icon size={17} /><span>{t(`nav.${id}`)}</span>
               {result && id === "destinations" ? <span className="nav-count">{result.destinations.length}</span> : null}
               {result && id === "subscriptions" ? <span className="nav-count">{result.subscriptions.length}</span> : null}
@@ -679,7 +727,7 @@ function ExplorerApp() {
               <h1>{t(`view.${activeView}.title`)}</h1>
               <p>{t(`view.${activeView}.desc`)}</p>
             </div>
-            {result ? <div className="heading-meta"><span>{t("page.lastScan")}</span><strong>{new Date(result.scannedAt).toLocaleString(localeCode(locale))}</strong></div> : null}
+            <div className="heading-actions"><Button variant="secondary" className="view-guide-button" onClick={() => setGuideOpen(true)}><CircleHelp size={15} />{t("guide.open")}</Button>{result ? <div className="heading-meta"><span>{t("page.lastScan")}</span><strong>{new Date(result.scannedAt).toLocaleString(localeCode(locale))}</strong></div> : null}</div>
           </div>
 
           {contextHelp ? (
@@ -698,8 +746,8 @@ function ExplorerApp() {
             <>
               {activeView === "overview" ? <Overview result={result} help={help} onHelp={setContextHelp} onNavigate={navigate} onSelect={selectItem} /> : null}
               {activeView === "compare" ? <SnapshotCompare sessions={sessions} /> : null}
-              {activeView === "case" ? <IncidentCase result={result} openResults={sessions.flatMap((session) => session.result ? [session.result] : [])} pinCandidate={makePinCandidate(selected, result)} /> : null}
-              {activeView === "journals" ? <JournalExplorer result={result} /> : null}
+              {activeView === "case" ? <IncidentCase result={result} openResults={sessions.flatMap((session) => session.result ? [session.result] : [])} pinCandidate={makePinCandidate(selected, result)} pinCandidates={buildPinCandidates(result)} /> : null}
+              {activeView === "journals" ? <JournalExplorer key={result.signature} result={result} /> : null}
               {activeView === "timeline" ? <EvidenceTimeline result={result} /> : null}
               {activeView === "export" ? <EvidenceExport key={result.signature} result={result} sessions={sessions} /> : null}
               {activeView === "destinations" ? <DestinationsView key={`${result.signature}:destinations`} stateKey={`${result.signature}:destinations`} result={result} help={help} onSelect={selectItem} onHelp={setContextHelp} /> : null}
@@ -725,6 +773,8 @@ function ExplorerApp() {
           <SearchGroup title={t("search.rawStrings")} items={searchResults.strings} render={(item) => ({ title: item.value, meta: `${item.file} · ${formatOffset(item.offset)}`, select: () => { setActiveView("messages"); setSearchOpen(false); } })} />
         </ScrollArea>
       </Dialog>
+      <ViewGuideDialog view={activeView} open={guideOpen} onOpenChange={setGuideOpen} />
+      {toast ? <div className="app-toast" role="status" aria-live="polite"><Info size={17} /><span>{toast}</span></div> : null}
     </div>
   );
 }
@@ -762,7 +812,7 @@ function Overview({ result, help, onHelp, onNavigate, onSelect }: { result: Scan
   const { t, locale } = useI18n();
   const store = displayStore(result, t);
   const warnings = [
-    result.signature === "synthetic-demo-v1" ? t("warning.demo") : "",
+    result.signature.startsWith("synthetic-") ? t("warning.demo") : "",
     result.truncated.strings ? t("warning.strings", { count: 6000 }) : "",
     result.truncated.messages ? t("warning.messages", { count: 2500 }) : "",
     result.storeKind === "Unknown Store Layout" ? t("warning.unknownStore") : "",
