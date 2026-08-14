@@ -85,9 +85,11 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force release | Out-Null
+          Copy-Item outputs\mq-watcher.exe release\mq-watcher.exe
           Compress-Archive -LiteralPath outputs\mq-watcher.exe -DestinationPath release\mq-watcher-windows-x64.zip
-          $hash = (Get-FileHash release\mq-watcher-windows-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  mq-watcher-windows-x64.zip" | Set-Content release\windows-x64.sha256 -Encoding ascii
+          $exeHash = (Get-FileHash release\mq-watcher.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          $zipHash = (Get-FileHash release\mq-watcher-windows-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          @("$exeHash  mq-watcher.exe", "$zipHash  mq-watcher-windows-x64.zip") | Set-Content release\windows-x64.sha256 -Encoding ascii
       - name: Package Linux executable
         if: runner.os == 'Linux'
         shell: bash

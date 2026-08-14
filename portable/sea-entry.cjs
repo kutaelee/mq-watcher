@@ -311,6 +311,17 @@ async function writeWebResponse(webResponse, response, headOnly) {
   await pipeline(Readable.fromWeb(webResponse.body), response);
 }
 
+async function readRequestBody(request, maxBytes = 1024) {
+  const chunks = [];
+  let length = 0;
+  for await (const chunk of request) {
+    length += chunk.length;
+    if (length > maxBytes) throw new Error("Request body is too large.");
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
 function openBrowser(url) {
   let command;
   let args;
@@ -329,27 +340,41 @@ function openBrowser(url) {
   child.unref();
 }
 
-async function startServer(root, port) {
+async function startServer(root, port, version) {
   const clientRoot = path.join(root, "dist", "client");
   const serverEntry = path.join(root, "dist", "server", "index.js");
+  process.env.MQ_WATCHER_DISTRIBUTION_MODE = "portable";
+  process.env.MQ_WATCHER_VERSION = version;
+  process.env.MQ_WATCHER_EXECUTABLE_PATH = process.execPath;
   const moduleUrl = pathToFileURL(serverEntry);
   moduleUrl.searchParams.set("sea", `${process.pid}-${Date.now()}`);
   const { default: handleRequest } = await import(moduleUrl.href);
   const server = createServer(async (request, response) => {
     try {
-      if (request.method !== "GET" && request.method !== "HEAD") {
+      const url = new URL(request.url || "/", "http://127.0.0.1");
+      const isUpdateInstall = request.method === "POST" && url.pathname === "/api/update";
+      if (request.method !== "GET" && request.method !== "HEAD" && !isUpdateInstall) {
         response.writeHead(405, { Allow: "GET, HEAD", "Content-Type": "text/plain; charset=utf-8" });
         response.end("Method not allowed\n");
         return;
       }
-      const url = new URL(request.url || "/", "http://127.0.0.1");
       if (await tryServeStatic(clientRoot, request, response, url.pathname)) return;
-      const webRequest = new Request(`http://127.0.0.1${url.pathname}${url.search}`, {
+      const controller = new AbortController();
+      request.once("aborted", () => controller.abort());
+      response.once("close", () => { if (!response.writableEnded) controller.abort(); });
+      const init = {
         method: request.method,
         headers: requestHeaders(request),
-      });
+        signal: controller.signal,
+      };
+      if (isUpdateInstall) {
+        init.body = await readRequestBody(request);
+        init.duplex = "half";
+      }
+      const webRequest = new Request(`http://127.0.0.1${url.pathname}${url.search}`, init);
       await writeWebResponse(await handleRequest(webRequest), response, request.method === "HEAD");
     } catch (error) {
+      if (response.destroyed || response.writableEnded) return;
       response.statusCode = 500;
       response.setHeader("Content-Type", "text/plain; charset=utf-8");
       response.end("MQ Watcher could not render this request.\n");
@@ -372,7 +397,7 @@ async function main() {
   if (options.version) return process.stdout.write(`${manifest.version}\n`);
   if (options.cacheInfo) return process.stdout.write(`${root}\n`);
 
-  const { server, url } = await startServer(root, options.port);
+  const { server, url } = await startServer(root, options.port, manifest.version);
   process.stdout.write(`MQ Watcher\nLocal read-only ActiveMQ Classic store evidence explorer\n\nListening on:\n${url}\n`);
   if (options.open) openBrowser(url);
   const close = () => server.close(() => process.exit(0));

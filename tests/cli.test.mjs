@@ -19,4 +19,19 @@ test("CLI server binds to loopback and serves the application and worker modules
 
   const rejected = await fetch(`${running.url}/`, { method: "POST" });
   assert.equal(rejected.status, 405);
+
+  const manualUpdate = await fetch(`${running.url}/api/update`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "install" }),
+  });
+  assert.equal(manualUpdate.status, 409);
+  assert.equal((await manualUpdate.json()).status, "manual");
+
+  const privateDataRejected = await fetch(`${running.url}/api/update`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "install", storePath: "C:\\private-store", analysis: "private" }),
+  });
+  assert.equal(privateDataRejected.status, 400);
 });

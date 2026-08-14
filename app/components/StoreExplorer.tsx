@@ -86,6 +86,7 @@ import { IncidentCase } from "./case/IncidentCase";
 import { JournalExplorer } from "./journals/JournalExplorer";
 import { EvidenceTimeline } from "./timeline/EvidenceTimeline";
 import { EvidenceExport } from "./export/EvidenceExport";
+import { UpdatePanel } from "./UpdatePanel";
 
 type ViewId = "overview" | "compare" | "case" | "journals" | "timeline" | "export" | "destinations" | "subscriptions" | "messages" | "evidence" | "files";
 
@@ -642,6 +643,7 @@ function ExplorerApp() {
           <ShieldCheck size={16} />
           <p><strong>{t("sidebar.readOnlyTitle")}</strong>{t("sidebar.readOnlyBody")}</p>
         </div>
+        <UpdatePanel locale={locale} />
       </aside>
 
       <main className={`main-content ${detailOpen ? "with-detail" : ""}`}>
