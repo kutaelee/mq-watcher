@@ -482,7 +482,8 @@ function ExplorerApp() {
           setActiveSessionId((current) => current === id ? null : current);
         }
         if (event.data.type === "error") {
-          setSessions((current) => current.map((session) => session.id === id && session.scanToken === reservation.token ? { ...session, error: event.data.message, status: "error", scanToken: undefined } : session));
+          const message = event.data.message;
+          setSessions((current) => current.map((session) => session.id === id && session.scanToken === reservation.token ? { ...session, error: message, status: "error", scanToken: undefined } : session));
           reservationsRef.current.release(signature, reservation.token);
           resourcesRef.current.cleanup(id);
           workersRef.current.delete(id);

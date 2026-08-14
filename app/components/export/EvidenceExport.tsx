@@ -51,7 +51,8 @@ export function EvidenceExport({ result, sessions }: { result: ScanResult; sessi
       if (event.data.type === "progress") setProgress(event.data.progress ?? 0);
       if (event.data.type === "complete" && event.data.result) {
         try {
-          const blob = new Blob([event.data.result.bytes], { type: "application/zip" });
+          const bytes = Uint8Array.from(event.data.result.bytes);
+          const blob = new Blob([bytes.buffer], { type: "application/zip" });
           const url = createAndClickDownload({
             blob,
             filename: "mq-watcher-evidence-bundle.zip",
