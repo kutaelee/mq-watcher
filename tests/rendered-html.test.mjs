@@ -58,6 +58,7 @@ test("ships the bounded worker scanner, localized UI, and sortable tables", asyn
 
 test("ships OSS safety guidance, broker fixture provenance, and portable release docs", async () => {
   const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
+  const koreanReadme = await readFile(new URL("../README.ko.md", import.meta.url), "utf8");
   const security = await readFile(new URL("../SECURITY.md", import.meta.url), "utf8");
   const contributing = await readFile(new URL("../CONTRIBUTING.md", import.meta.url), "utf8");
   const demo = JSON.parse(
@@ -71,6 +72,9 @@ test("ships OSS safety guidance, broker fixture provenance, and portable release
   assert.match(readme, /5\.13\.5[\s\S]*5\.15\.16[\s\S]*5\.18\.7/);
   assert.match(readme, /Broker fixture verified/);
   assert.match(readme, /mq-watcher-windows-x64\.zip/);
+  assert.match(readme, /\[한국어\]\(README\.ko\.md\)/);
+  assert.match(koreanReadme, /\[English\]\(README\.md\)/);
+  assert.match(koreanReadme, /브로커를 기동하지 않습니다/);
   assert.match(security, /IndexedDB/);
   assert.match(security, /no telemetry, automatic update client, or external network listener/);
   assert.match(contributing, /Read-only invariant/);
@@ -79,7 +83,9 @@ test("ships OSS safety guidance, broker fixture provenance, and portable release
   assert.equal(demo.scannedAt, "2026-01-01T00:00:00.000Z");
   assert.ok(demo.files.every((file) => file.modified === 1767225600000));
 
-  for (const name of ["overview.png", "evidence-links.png", "evidence-detail.png"]) {
-    await access(new URL(`../docs/screenshots/${name}`, import.meta.url));
+  for (const locale of ["en", "ko"]) {
+    for (const name of ["overview.png", "evidence-links.png", "evidence-detail.png"]) {
+      await access(new URL(`../docs/screenshots/${locale}/${name}`, import.meta.url));
+    }
   }
 });
