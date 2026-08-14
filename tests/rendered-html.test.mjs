@@ -56,7 +56,7 @@ test("ships the bounded worker scanner, localized UI, and sortable tables", asyn
   await assert.rejects(access(new URL("../app/_sites-preview", import.meta.url)));
 });
 
-test("ships OSS safety guidance and synthetic-only documentation assets", async () => {
+test("ships OSS safety guidance, broker fixture provenance, and portable release docs", async () => {
   const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
   const security = await readFile(new URL("../SECURITY.md", import.meta.url), "utf8");
   const contributing = await readFile(new URL("../CONTRIBUTING.md", import.meta.url), "utf8");
@@ -68,8 +68,11 @@ test("ships OSS safety guidance and synthetic-only documentation assets", async 
     readme,
     /No broker startup\. No store recovery\. No writes\. No uploads\. Evidence first\./,
   );
-  assert.match(readme, /runtime \*\*Not verified\*\*/);
+  assert.match(readme, /5\.13\.5[\s\S]*5\.15\.16[\s\S]*5\.18\.7/);
+  assert.match(readme, /Broker fixture verified/);
+  assert.match(readme, /mq-watcher-windows-x64\.zip/);
   assert.match(security, /IndexedDB/);
+  assert.match(security, /no telemetry, automatic update client, or external network listener/);
   assert.match(contributing, /Read-only invariant/);
   assert.equal(demo.directoryName, "synthetic-kahadb-demo");
   assert.equal(demo.signature, "synthetic-demo-v1");

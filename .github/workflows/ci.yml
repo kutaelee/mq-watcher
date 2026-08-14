@@ -25,3 +25,41 @@ jobs:
       - run: npm run build
       - run: npm test
       - run: npm run test:fixtures
+      - run: npm run test:broker-fixtures
+
+  broker-generated-fixtures:
+    name: ActiveMQ ${{ matrix.activemq }} broker fixture
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - activemq: "5.13.5"
+            java: "8"
+          - activemq: "5.15.16"
+            java: "8"
+          - activemq: "5.18.7"
+            java: "17"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+      - run: npm ci
+      - name: Generate broker KahaDB
+        run: >-
+          node scripts/generate-broker-fixture.mjs
+          --version "${{ matrix.activemq }}"
+          --java-home "$JAVA_HOME"
+          --cache "$RUNNER_TEMP/activemq-cache"
+          --output "$RUNNER_TEMP/fixture-${{ matrix.activemq }}"
+      - name: Verify generated journal evidence
+        run: >-
+          node scripts/verify-broker-fixture.mjs
+          "$RUNNER_TEMP/fixture-${{ matrix.activemq }}"
+          "${{ matrix.activemq }}"

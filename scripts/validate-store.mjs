@@ -39,6 +39,16 @@ const report = {
   })),
   advisoryStrings: result.totals.advisoryRecords,
   messageCandidates: result.messages.length,
+  structured: {
+    status: result.structured.status,
+    journals: result.structured.journals.length,
+    batches: result.structured.journals.reduce((sum, journal) => sum + journal.batches.length, 0),
+    records: result.structured.records.length,
+    commands: Object.fromEntries(
+      Object.entries(Object.groupBy(result.structured.records, (record) => record.command))
+        .map(([command, records]) => [command, records.length]),
+    ),
+  },
   printableStringsStored: result.strings.length,
   truncated: result.truncated,
   hashBefore: scan.hashBefore,

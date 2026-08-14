@@ -13,7 +13,9 @@ The implementation follows these Apache ActiveMQ Classic sources:
 - [`journal-data.proto`](https://github.com/apache/activemq/blob/main/activemq-kahadb-store/src/main/proto/journal-data.proto): command identifiers and fields for destinations, message IDs, subscriptions, and transactions.
 - [`BaseMessage`](https://github.com/apache/activemq-protobuf/blob/master/activemq-protobuf/src/main/java/org/apache/activemq/protobuf/BaseMessage.java): the command frame begins with a protobuf varint payload length.
 
-The same journal constants and command schema were source-reviewed in the official `activemq-5.15.16` and `activemq-5.18.7` tags. This is a source-layout comparison, not runtime compatibility certification. Apache documents that KahaDB is the default store from ActiveMQ 5.4 and that `storeOpenWireVersion` varies across releases; MQ Watcher therefore does not infer a broker or OpenWire version from journal framing alone. See the official [KahaDB documentation](https://activemq.apache.org/components/classic/documentation/kahadb).
+The same journal constants and command schema were source-reviewed and runtime-checked with broker-generated stores from ActiveMQ 5.13.5, 5.15.16, and 5.18.7. Apache documents that KahaDB is the default store from ActiveMQ 5.4 and that `storeOpenWireVersion` varies across releases; MQ Watcher therefore does not infer a broker or OpenWire version from journal framing alone. See the official [KahaDB documentation](https://activemq.apache.org/components/classic/documentation/kahadb).
+
+ActiveMQ's generated `KahaLocalTransactionId` classes encode both `connection_id` and `transaction_id` with protobuf field number 1 but different wire types in the verified releases. The parser distinguishes the values by wire type and also accepts field number 2 for corrected or custom schemas.
 
 ## Parsed in P1
 
@@ -27,7 +29,7 @@ The same journal constants and command schema were source-reviewed in the offici
 - subscription key for subscription and topic-ack records
 - local/XA transaction identity where the documented fields are present
 
-The committed `kahadb-framing` fixture is generated from these rules and checks deterministic parsing. It is a synthetic conformance fixture, not a broker-generated store.
+The committed `kahadb-framing` fixture remains a small synthetic conformance case. Separate `fixtures/broker/<version>` stores provide real broker evidence for Queue add, Queue ACK/remove, local transaction commit, durable subscription, and offline durable Topic delivery.
 
 ## Explicitly unsupported or partial
 
@@ -37,7 +39,7 @@ The committed `kahadb-framing` fixture is generated from these rules and checks 
 - legacy AMQ Message Store `journal/data-*` parsing
 - automatic corruption resynchronization after an invalid header
 - command-specific fields outside the selected destination/message/subscription/transaction metadata
-- broker-version identification or compatibility claims without a redistributable broker-generated fixture
+- broker-version identification from journal framing alone
 
 Unknown command IDs are `Unsupported`. Recognized framing with incomplete or malformed command fields is `Partial`. Files without a valid batch header remain `Unknown`; the parser does not manufacture fallback values.
 

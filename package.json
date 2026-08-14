@@ -1,6 +1,6 @@
 {
   "name": "mq-watcher",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local read-only ActiveMQ Classic store evidence explorer",
   "license": "MIT",
   "repository": {
@@ -31,9 +31,12 @@
   "scripts": {
     "dev": "vinext dev",
     "build": "vinext build",
+    "build:portable": "npm run build && node scripts/build-portable.mjs",
+    "test:portable": "node scripts/smoke-portable.mjs",
     "start": "vinext start",
     "test": "npm run build && node --test tests/*.test.mjs",
     "test:fixtures": "node --test tests/fixtures.test.mjs",
+    "test:broker-fixtures": "node --test tests/broker-fixtures.test.mjs",
     "fixtures:generate": "node scripts/generate-synthetic-fixtures.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "validate:store": "node scripts/validate-store.mjs",
@@ -48,8 +51,8 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.31.0",
-    "react": "19.2.6",
-    "react-dom": "19.2.6",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
@@ -66,12 +69,13 @@
     "eslint-plugin-react": "7.37.5",
     "eslint-plugin-react-hooks": "7.1.1",
     "globals": "16.4.0",
-    "react-server-dom-webpack": "19.2.6",
+    "postject": "1.0.0-alpha.6",
+    "react-server-dom-webpack": "19.2.8",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3",
     "typescript-eslint": "8.59.3",
-    "vinext": "1.0.0-beta.2",
-    "vite": "8.0.13"
+    "vinext": "1.0.0-beta.5",
+    "vite": "8.2.1"
   },
   "type": "module"
 }

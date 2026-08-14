@@ -1,0 +1,122 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+      - run: npm ci
+      - name: Verify tag matches package version
+        run: node -e "if ('v' + require('./package.json').version !== process.env.GITHUB_REF_NAME) process.exit(1)"
+      - run: npm run lint
+      - run: npm test
+      - run: npm run test:fixtures
+      - run: npm run test:broker-fixtures
+
+  broker-generated-fixtures:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - activemq: "5.13.5"
+            java: "8"
+          - activemq: "5.15.16"
+            java: "8"
+          - activemq: "5.18.7"
+            java: "17"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+      - run: npm ci
+      - run: >-
+          node scripts/generate-broker-fixture.mjs
+          --version "${{ matrix.activemq }}"
+          --java-home "$JAVA_HOME"
+          --cache "$RUNNER_TEMP/activemq-cache"
+          --output "$RUNNER_TEMP/fixture-${{ matrix.activemq }}"
+      - run: >-
+          node scripts/verify-broker-fixture.mjs
+          "$RUNNER_TEMP/fixture-${{ matrix.activemq }}"
+          "${{ matrix.activemq }}"
+
+  portable:
+    needs: [verify, broker-generated-fixtures]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows-x64
+          - os: ubuntu-latest
+            platform: linux-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+      - run: npm ci
+      - run: npm run build:portable
+      - run: npm run test:portable
+      - name: Package Windows executable
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release | Out-Null
+          Compress-Archive -LiteralPath outputs\mq-watcher.exe -DestinationPath release\mq-watcher-windows-x64.zip
+          $hash = (Get-FileHash release\mq-watcher-windows-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  mq-watcher-windows-x64.zip" | Set-Content release\windows-x64.sha256 -Encoding ascii
+      - name: Package Linux executable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          mkdir -p release
+          tar -C outputs -czf release/mq-watcher-linux-x64.tar.gz mq-watcher
+          hash=$(sha256sum release/mq-watcher-linux-x64.tar.gz | cut -d' ' -f1)
+          printf '%s  %s\n' "$hash" 'mq-watcher-linux-x64.tar.gz' > release/linux-x64.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: portable-${{ matrix.platform }}
+          path: release/*
+          if-no-files-found: error
+
+  publish:
+    needs: portable
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: portable-*
+          path: release
+          merge-multiple: true
+      - name: Verify and publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          cat release/*.sha256 | sort > release/SHA256SUMS.txt
+          rm release/*.sha256
+          (cd release && sha256sum -c SHA256SUMS.txt)
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "MQ Watcher $GITHUB_REF_NAME" --generate-notes release/*

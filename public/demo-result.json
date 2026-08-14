@@ -21,7 +21,27 @@
       "decodedName": "ActiveMQ.Advisory.TempQueue",
       "rawName": "ActiveMQ.Advisory.TempQueue",
       "source": "db-1.log",
-      "confidence": "Observed",
+      "confidence": "Parsed",
+      "occurrences": 2
+    },
+    {
+      "id": "Queue:ORDERS",
+      "type": "Queue",
+      "name": "ORDERS",
+      "decodedName": "ORDERS",
+      "rawName": "ORDERS",
+      "source": "db-1.log",
+      "confidence": "Parsed",
+      "occurrences": 2
+    },
+    {
+      "id": "Topic:PRICES",
+      "type": "Topic",
+      "name": "PRICES",
+      "decodedName": "PRICES",
+      "rawName": "PRICES",
+      "source": "db-1.log",
+      "confidence": "Parsed",
       "occurrences": 1
     }
   ],

@@ -13,8 +13,22 @@
       "type": "Topic",
       "name": "ActiveMQ.Advisory.TempQueue",
       "source": "db-1.log",
+      "occurrences": 2,
+      "confidence": "Parsed"
+    },
+    {
+      "type": "Queue",
+      "name": "ORDERS",
+      "source": "db-1.log",
+      "occurrences": 2,
+      "confidence": "Parsed"
+    },
+    {
+      "type": "Topic",
+      "name": "PRICES",
+      "source": "db-1.log",
       "occurrences": 1,
-      "confidence": "Observed"
+      "confidence": "Parsed"
     }
   ],
   "subscriptions": [],

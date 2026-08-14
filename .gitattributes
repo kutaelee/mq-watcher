@@ -1,2 +1,3 @@
 # Synthetic forensic fixtures are byte-exact test inputs, even when printable.
 fixtures/synthetic/** -text
+fixtures/broker/**/kahadb/** -text
