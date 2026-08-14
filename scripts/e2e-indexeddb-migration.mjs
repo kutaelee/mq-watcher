@@ -364,16 +364,15 @@ function assertIdempotentReload(snapshot) {
 const openCaseAndReadUnresolvedExpression = `(${async function openCaseAndReadUnresolved() {
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
+    if (document.querySelector(".case-layout")) break;
     const button = Array.from(document.querySelectorAll("button")).find((candidate) => {
       const text = candidate.textContent ?? "";
       return text.includes("조사 케이스") || text.includes("Incident case");
     });
-    if (button) {
-      button.click();
-      break;
-    }
+    button?.click();
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
+  if (!document.querySelector(".case-layout")) throw new Error("the hydrated Incident Case view did not open");
   while (Date.now() < deadline) {
     const text = document.body?.innerText ?? "";
     if ((text.includes("현재 미해결") || text.includes("Currently unresolved")) && text.includes("Foreign unresolved evidence")) {
