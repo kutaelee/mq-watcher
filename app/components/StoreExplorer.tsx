@@ -17,6 +17,7 @@ import {
   Files,
   FolderOpen,
   Gauge,
+  GitCompareArrows,
   HardDrive,
   Info,
   Languages,
@@ -76,8 +77,9 @@ import {
   TabsTrigger,
   Tooltip,
 } from "./ui";
+import { SnapshotCompare } from "./compare/SnapshotCompare";
 
-type ViewId = "overview" | "destinations" | "subscriptions" | "messages" | "evidence" | "files";
+type ViewId = "overview" | "compare" | "destinations" | "subscriptions" | "messages" | "evidence" | "files";
 
 type Selected =
   | { type: "destination"; value: DestinationRecord }
@@ -133,6 +135,7 @@ const EMPTY_PROGRESS: WorkerProgress = {
 const SCANNER_VERSION = "3";
 const NAVIGATION: Array<{ id: ViewId; icon: typeof Gauge }> = [
   { id: "overview", icon: Gauge },
+  { id: "compare", icon: GitCompareArrows },
   { id: "destinations", icon: Boxes },
   { id: "subscriptions", icon: Network },
   { id: "messages", icon: MessageSquareText },
@@ -601,6 +604,7 @@ function ExplorerApp() {
           {result && !isScanning ? (
             <>
               {activeView === "overview" ? <Overview result={result} help={help} onHelp={setContextHelp} onNavigate={navigate} onSelect={selectItem} /> : null}
+              {activeView === "compare" ? <SnapshotCompare sessions={sessions} /> : null}
               {activeView === "destinations" ? <DestinationsView key={`${result.signature}:destinations`} stateKey={`${result.signature}:destinations`} result={result} help={help} onSelect={selectItem} onHelp={setContextHelp} /> : null}
               {activeView === "subscriptions" ? <SubscriptionsView key={`${result.signature}:subscriptions`} stateKey={`${result.signature}:subscriptions`} result={result} help={help} onSelect={selectItem} onHelp={setContextHelp} /> : null}
               {activeView === "messages" ? <MessagesView key={`${result.signature}:messages`} stateKey={`${result.signature}:messages`} result={result} onSelect={selectItem} /> : null}

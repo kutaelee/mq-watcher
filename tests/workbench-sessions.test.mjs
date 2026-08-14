@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { closeSession, findReusableSession, MAX_STORE_SESSIONS, restoreSessions, sessionId } from "../app/lib/workbench.mjs";
+import { buildSnapshotDiff, closeSession, findReusableSession, MAX_STORE_SESSIONS, restoreSessions, sessionId } from "../app/lib/workbench.mjs";
 
 test("session IDs and duplicate lookup are deterministic", () => {
   assert.equal(sessionId("3:store:1:abc"), sessionId("3:store:1:abc"));
@@ -26,4 +26,23 @@ test("restoration is bounded and marks cached sessions", () => {
   const restored = restoreSessions({ sessions });
   assert.equal(restored.length, MAX_STORE_SESSIONS);
   assert.ok(restored.every((session) => session.restored && session.status === "ready"));
+});
+
+test("snapshot diff is deterministic and reports observations without runtime-state claims", () => {
+  const base = {
+    destinations: [{ type: "Queue", name: "ORDERS", occurrences: 2 }],
+    subscriptions: [],
+    files: [{ path: "db-1.log", size: 100 }],
+    structured: { records: [{ command: "KahaAddMessageCommand", destination: { name: "ORDERS" } }] },
+    correlation: { counts: { messages: 1 } },
+  };
+  const later = structuredClone(base);
+  later.destinations[0].occurrences = 3;
+  later.destinations.push({ type: "Topic", name: "PRICES", occurrences: 1 });
+  later.files[0].size = 140;
+  const first = buildSnapshotDiff(base, later);
+  assert.deepEqual(first, buildSnapshotDiff(base, later));
+  assert.ok(first.some((row) => row.status === "not-observed-left" && row.key.includes("PRICES")));
+  assert.ok(first.some((row) => row.status === "changed" && row.delta === 40));
+  assert.ok(first.every((row) => !row.status.includes("removed")));
 });
