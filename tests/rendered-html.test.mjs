@@ -76,7 +76,8 @@ test("ships OSS safety guidance, broker fixture provenance, and portable release
   assert.match(koreanReadme, /\[English\]\(README\.md\)/);
   assert.match(koreanReadme, /브로커를 기동하지 않습니다/);
   assert.match(security, /IndexedDB/);
-  assert.match(security, /no telemetry, automatic update client, or external network listener/);
+  assert.match(security, /no telemetry or external network listener/);
+  assert.match(security, /does not download an update asset until the user selects the update action/);
   assert.match(contributing, /Read-only invariant/);
   assert.equal(demo.directoryName, "synthetic-kahadb-demo");
   assert.equal(demo.signature, "synthetic-demo-v1");
