@@ -1,0 +1,2 @@
+# Synthetic forensic fixtures are byte-exact test inputs, even when printable.
+fixtures/synthetic/** -text

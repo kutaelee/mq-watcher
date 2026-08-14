@@ -73,6 +73,8 @@ test("ships OSS safety guidance and synthetic-only documentation assets", async 
   assert.match(contributing, /Read-only invariant/);
   assert.equal(demo.directoryName, "synthetic-kahadb-demo");
   assert.equal(demo.signature, "synthetic-demo-v1");
+  assert.equal(demo.scannedAt, "2026-01-01T00:00:00.000Z");
+  assert.ok(demo.files.every((file) => file.modified === 1767225600000));
 
   for (const name of ["overview.png", "evidence-links.png", "evidence-detail.png"]) {
     await access(new URL(`../docs/screenshots/${name}`, import.meta.url));

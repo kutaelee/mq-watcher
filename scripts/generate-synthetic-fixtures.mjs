@@ -229,13 +229,18 @@ for (const fixtureName of fixtureNames) {
 }
 
 const demoScan = await scanPath(path.join(fixtureRoot, "kahadb-framing"));
+const demoTimestamp = "2026-01-01T00:00:00.000Z";
 await writeFile(
   path.join(repositoryRoot, "public", "demo-result.json"),
   `${JSON.stringify({
     ...demoScan.result,
     signature: "synthetic-demo-v1",
     directoryName: "synthetic-kahadb-demo",
-    scannedAt: "2026-01-01T00:00:00.000Z",
+    files: demoScan.result.files.map((file) => ({
+      ...file,
+      modified: Date.parse(demoTimestamp),
+    })),
+    scannedAt: demoTimestamp,
   }, null, 2)}\n`,
 );
 
