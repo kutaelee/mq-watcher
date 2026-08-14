@@ -29,13 +29,15 @@ test("session IDs and duplicate lookup are deterministic", () => {
 });
 
 test("store identity excludes directory display name and uses canonical inventory SHA-256", async () => {
-  const files = [{ relativePath: "db-1.log", file: { size: 10, lastModified: 7 } }, { relativePath: "lock", file: { size: 0, lastModified: 1 } }];
+  let sourceReads = 0;
+  const files = [{ relativePath: "db-1.log", file: { size: 10, lastModified: 7, arrayBuffer() { sourceReads += 1; throw new Error("source bytes must not be read for tab identity"); } } }, { relativePath: "lock", file: { size: 0, lastModified: 1 } }];
   const first = await buildStoreSignature(files, "4");
   const renamedDirectorySameInventory = await buildStoreSignature([...files].reverse(), "4");
   const changed = await buildStoreSignature([{ relativePath: "db-1.log", file: { size: 11, lastModified: 7 } }], "4");
   assert.equal(first, renamedDirectorySameInventory);
   assert.notEqual(first, changed);
   assert.match(first, /^4:inventory-sha256:[a-f0-9]{64}$/);
+  assert.equal(sourceReads, 0, "normal tab identity must not perform a whole-Store integrity read");
 });
 
 test("signature reservation rejects duplicate-open races and stale generations", () => {
@@ -121,6 +123,10 @@ test("IndexedDB v0.2 cache is invalidated for v0.3 while incident cases are pres
     `put:schema-meta:${CACHE_SCHEMA_VERSION}`,
   ]);
   assert.ok(!operations.includes("clear:incident-cases"));
+
+  operations.length = 0;
+  applyDatabaseUpgrade(database, transaction, CACHE_SCHEMA_VERSION);
+  assert.deepEqual(operations, [`put:schema-meta:${CACHE_SCHEMA_VERSION}`], "reopening the current schema must be idempotent");
 });
 
 test("session resource cleanup releases every registered resource exactly once", () => {
