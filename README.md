@@ -24,8 +24,22 @@ This is an independent open-source tool. It is not affiliated with or supported 
 - A bounded printable-string scanner for legacy or unsupported layouts
 - A source-based parser for KahaDB journal batches, record headers, command envelopes, checksums, and selected metadata
 - An evidence-correlation view for message, ACK/remove, subscription, transaction, and Advisory relationships
+- A six-part investigation workbench for multiple Stores, snapshot comparison, incident notes, journal review, evidence ordering, and redacted export
 - A loopback-only CLI that serves the UI locally
 - A standalone Windows/Linux executable that does not require Node.js
+
+## Investigation workbench
+
+The workbench organizes evidence without turning observations into an automated root-cause verdict:
+
+1. **Multi-Store tabs** — open up to six Store analyses. On explicit open, a Worker reads the selected files in bounded chunks and derives a content-based SHA-256 signature; the directory display name is not the identity. Ordinary tab and view interactions reuse that signature. Closing a tab cancels and releases its task-owned Worker, request, listener, timer, and object URL resources.
+2. **Snapshot A/B comparison** — compare semantic entities by documented keys such as destination type/name, subscription key, message ID, and transaction ID. File paths and offsets remain provenance, not identity. Raw occurrences and unique semantic entities are reported separately.
+3. **Incident Case Mode** — keep local hypotheses, notes, and pinned evidence. References use Store signature, semantic evidence key, and provenance, and remain visibly unresolved when the referenced Store or evidence is unavailable after reload.
+4. **Journal Retention Explorer** — reverse-index observed records and evidence references by journal file. It shows where evidence was observed; it does not decide why a journal was retained or whether it is currently in use.
+5. **Evidence Timeline** — order records only by offset within each journal. MQ Watcher does not invent a global time order between different journal files.
+6. **Evidence Bundle Export** — build a cancellable ZIP in a Worker with progress, optional centralized redaction, a manifest, and per-entry SHA-256 values. The bundle contains derived evidence, not the selected Store files.
+
+Investigation Leads are presented as relevance prompts. Every lead explains why it was surfaced and what it does **not** prove; it is not an anomaly score or a root-cause score.
 
 ## Why it exists
 
@@ -40,6 +54,7 @@ It does **not** diagnose a crashed consumer, prove broker corruption, recover a 
 - The CLI binds only to `127.0.0.1` and has no store-upload endpoint.
 - The tool does not connect to a broker, load product JARs, start recovery, compact, rename, delete, or modify store files.
 - Fixture tests hash every source before and after scanning and fail if bytes change.
+- Cached analysis remains available when File System permission is unavailable; source-dependent rescanning remains unavailable until permission is granted again.
 - Unrecognized layouts and values remain `Unknown`, `Unsupported`, or `Partial`.
 
 See [Security and privacy](SECURITY.md) before examining production-derived data.
@@ -55,6 +70,12 @@ mq-watcher.exe
 ```
 
 The executable starts a server bound only to `127.0.0.1`, chooses an available port, and opens the browser. Use `--no-open` to suppress browser launch. The packaged application is verified and extracted under `%LOCALAPPDATA%\MQ Watcher\Cache\<version-hash>`; selected broker stores are not copied into that cache. The release executable is currently unsigned, so Windows SmartScreen may show a warning.
+
+### Updates
+
+When the UI opens, MQ Watcher checks the repository's fixed GitHub Releases API endpoint for the latest stable version. This metadata request sends the application version in its user agent; it does not send Store paths, names, file bytes, cached analysis, or case notes. It does not download release assets until the user selects **Verify and update**.
+
+Automatic replacement is supported only by the Windows x64 portable executable. Source, npm, Linux, unsupported architecture, draft, pre-release, downgrade, or incomplete release-asset cases remain manual or blocked. Before replacement, the updater restricts release and redirect locations, checks declared sizes, verifies `SHA256SUMS.txt` and release SHA-256 metadata, stages the file beside the current executable, smoke-checks its version, and rolls back on replacement failure. See [Portable release and updater](docs/portable-release.md) for the exact boundary and current validation status.
 
 Linux users can extract `mq-watcher-linux-x64.tar.gz` and run `./mq-watcher`.
 
@@ -113,6 +134,8 @@ All screenshots use the committed synthetic fixture. They contain no customer or
 
 ![Evidence reference detail](docs/screenshots/en/evidence-detail.png)
 
+![Investigation Workbench evidence timeline](docs/screenshots/en/workbench-timeline.png)
+
 ## Example workflow
 
 1. Start MQ Watcher locally and open the printed loopback URL.
@@ -143,6 +166,8 @@ See [broker-generated fixture validation](docs/validation/broker-generated-fixtu
 - Corruption recovery and resynchronization are intentionally not performed.
 - A selected directory may omit older journal files or external evidence.
 - The browser cache contains analysis results, not original files, but those results can still contain operational identifiers.
+- Redaction reduces accidental disclosure in an exported bundle but is not a guarantee that every operationally sensitive value has been recognized. Review a bundle before sharing it.
+- Update checks require network access to GitHub. Automatic replacement is limited to the supported Windows x64 portable distribution; other distributions link to the release page for manual update.
 - Broker-generated fixtures validate only the documented scenarios and selected journal metadata; they do not certify every ActiveMQ patch release, OpenWire body, page index, or recovery path.
 - CI validates the test suite on Ubuntu and Windows with Node 22.13.0 and regenerates the broker fixtures with the required Java runtime.
 
@@ -163,16 +188,19 @@ The development server defaults to `http://localhost:3000`. Contribution rules, 
 
 ```bash
 npm run lint
+npm run typecheck
 npm run build
 npm test
 npm run test:fixtures
 npm run test:broker-fixtures
+npm run test:portable-cache
+npm run test:e2e:indexeddb
 npm run build:portable
 npm run test:portable
 npm pack --dry-run
 ```
 
-CI runs the install, lint, build, full test, and fixture test sequence on Windows and Ubuntu. Tag builds also rebuild and smoke-test the standalone executables before publishing archives and `SHA256SUMS.txt`.
+CI runs install, lint, strict type checking, build, the full test suite, fixture tests, broker-fixture tests, portable-cache tests, and the real Chromium IndexedDB migration test on Windows and Ubuntu where configured. Tag builds also rebuild and smoke-test the standalone executables before publishing archives and `SHA256SUMS.txt`. The v0.3 workbench evidence and still-pending release gates are recorded in [v0.3 validation](docs/validation/v0.3-investigation-workbench.md).
 
 ## License
 
