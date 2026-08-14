@@ -7,6 +7,11 @@ import { scanPath } from "./fixture-lib.mjs";
 
 export const brokerVersions = ["5.13.5", "5.15.16", "5.18.7"];
 
+export function containsWorkstationIdentifier(bytes) {
+  const text = Buffer.from(bytes).toString("latin1");
+  return /DESKTOP-|kutae|(?:file:\/+)?[A-Z]:[\\/]Users[\\/][^\\/\p{Cc}]{1,128}[\\/]|\/(?:home|Users)\/[^/\p{Cc}]{1,128}\//iu.test(text);
+}
+
 async function sha256(file) {
   return createHash("sha256").update(await readFile(file)).digest("hex");
 }
@@ -58,8 +63,8 @@ export async function verifyBrokerFixture(fixtureRoot, expectedVersion) {
   assert.equal(add("PRICES")?.destination?.type, "Topic");
 
   for (const entry of manifest.files) {
-    const text = (await readFile(path.join(fixtureRoot, "kahadb", ...entry.path.split("/")))).toString("latin1");
-    assert.doesNotMatch(text, /DESKTOP-|kutae|[A-Z]:\\/i, "fixture must not expose workstation identifiers");
+    const bytes = await readFile(path.join(fixtureRoot, "kahadb", ...entry.path.split("/")));
+    assert.equal(containsWorkstationIdentifier(bytes), false, "fixture must not expose workstation identifiers");
   }
 
   return {

@@ -426,6 +426,8 @@ test("generated replacement helper smoke-checks the new version and rolls back b
   const helperName = (await readdir(root)).find((name) => name.endsWith(".ps1"));
   assert.ok(helperName);
   const helper = await readFile(path.join(root, helperName), "utf8");
+  assert.match(helper, /System\.Security\.Cryptography\.SHA256/);
+  assert.doesNotMatch(helper, /Get-FileHash/);
   assert.match(helper, /System\.Diagnostics\.ProcessStartInfo/);
   assert.match(helper, /\$versionProcess\.WaitForExit\(10000\)/);
   assert.match(helper, /taskkill\.exe/);
