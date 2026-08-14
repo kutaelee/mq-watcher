@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { spawn } from "node:child_process";
 import { chmod, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -9,6 +9,11 @@ const RELEASE_DOWNLOAD_PREFIX = ["kutaelee", "mq-watcher", "releases", "download
 const CHECKSUM_ASSET_NAME = "SHA256SUMS.txt";
 const MAX_CHECKSUM_BYTES = 1024 * 1024;
 const MAX_PORTABLE_BYTES = 512 * 1024 * 1024;
+const DOWNLOAD_HOSTS = new Set([
+  "release-assets.githubusercontent.com",
+  "objects.githubusercontent.com",
+  "github-releases.githubusercontent.com",
+]);
 
 export class UpdaterError extends Error {
   constructor(code, message) {
@@ -102,6 +107,27 @@ function normalizeMode(mode) {
   return mode === "portable" || mode === "npm" ? mode : "source";
 }
 
+export function createInstallToken() {
+  return randomBytes(32).toString("base64url");
+}
+
+export function authorizeInstallRequest(request, expectedToken) {
+  const site = request.headers.get("sec-fetch-site");
+  if (site !== "same-origin") return false;
+  const origin = request.headers.get("origin");
+  if (!origin) return false;
+  try {
+    const parsed = new URL(origin);
+    if (parsed.protocol !== "http:" || !["127.0.0.1", "localhost", "[::1]"].includes(parsed.hostname)) return false;
+  } catch {
+    return false;
+  }
+  const supplied = request.headers.get("x-mq-watcher-install-token") || "";
+  const expectedBytes = Buffer.from(String(expectedToken));
+  const suppliedBytes = Buffer.from(supplied);
+  return expectedBytes.length > 0 && expectedBytes.length === suppliedBytes.length && timingSafeEqual(expectedBytes, suppliedBytes);
+}
+
 async function fetchReleaseJson(fetchImpl, signal, currentVersion) {
   const response = await fetchImpl(RELEASE_API_URL, {
     method: "GET",
@@ -168,12 +194,37 @@ export async function checkForUpdate({
   };
 }
 
-async function responseBytes(response, maxBytes, label) {
+function assertOfficialDownloadResponse(response, asset) {
+  if (!response.url) fail("untrusted-redirect", `${asset.name} download did not report its final URL.`);
+  const url = new URL(response.url);
+  if (url.protocol !== "https:" || url.username || url.password || url.hash) {
+    fail("untrusted-redirect", `Refusing an untrusted final download URL for ${asset.name}.`);
+  }
+  if (url.hostname === "github.com") {
+    if (url.href !== asset.url) fail("untrusted-redirect", `Refusing an unexpected GitHub download URL for ${asset.name}.`);
+    return;
+  }
+  if (!DOWNLOAD_HOSTS.has(url.hostname) || url.pathname === "/") {
+    fail("untrusted-redirect", `Refusing an untrusted final download host for ${asset.name}.`);
+  }
+}
+
+function declaredLength(response, label) {
+  const header = response.headers.get("content-length");
+  if (header === null) return null;
+  const value = Number(header);
+  if (!Number.isSafeInteger(value) || value < 0) fail("download-size-mismatch", `${label} returned an invalid Content-Length.`);
+  return value;
+}
+
+async function responseBytes(response, maxBytes, expectedBytes, label) {
   if (!response.ok) fail("download-failed", `${label} download failed with HTTP ${response.status}.`);
-  const declared = Number(response.headers.get("content-length"));
+  const declared = declaredLength(response, label);
   if (Number.isFinite(declared) && declared > maxBytes) fail("download-too-large", `${label} is larger than allowed.`);
+  if (declared !== null && declared !== expectedBytes) fail("download-size-mismatch", `${label} size did not match release metadata.`);
   const bytes = new Uint8Array(await response.arrayBuffer());
   if (bytes.byteLength > maxBytes) fail("download-too-large", `${label} is larger than allowed.`);
+  if (bytes.byteLength !== expectedBytes) fail("download-size-mismatch", `${label} size did not match release metadata.`);
   return bytes;
 }
 
@@ -223,16 +274,19 @@ export async function stagePortableUpdate({
   try {
     signal?.throwIfAborted();
     const checksumResponse = await fetchImpl(checksumAsset.url, { method: "GET", redirect: "follow", signal });
-    const checksumBytes = await responseBytes(checksumResponse, MAX_CHECKSUM_BYTES, CHECKSUM_ASSET_NAME);
+    assertOfficialDownloadResponse(checksumResponse, checksumAsset);
+    const checksumBytes = await responseBytes(checksumResponse, MAX_CHECKSUM_BYTES, checksumAsset.size, CHECKSUM_ASSET_NAME);
     const expectedSha256 = checksumFor(new TextDecoder().decode(checksumBytes), portableAsset.name);
     if (portableAsset.digest && portableAsset.digest !== expectedSha256) {
       fail("checksum-conflict", "GitHub asset digest and SHA256SUMS.txt disagree.");
     }
 
     const binaryResponse = await fetchImpl(portableAsset.url, { method: "GET", redirect: "follow", signal });
+    assertOfficialDownloadResponse(binaryResponse, portableAsset);
     if (!binaryResponse.ok || !binaryResponse.body) fail("download-failed", `Portable download failed with HTTP ${binaryResponse.status}.`);
-    const declared = Number(binaryResponse.headers.get("content-length"));
+    const declared = declaredLength(binaryResponse, portableAsset.name);
     if (Number.isFinite(declared) && declared > MAX_PORTABLE_BYTES) fail("download-too-large", "The portable executable is larger than allowed.");
+    if (declared !== null && declared !== portableAsset.size) fail("download-size-mismatch", "The portable executable size did not match release metadata.");
     temporaryHandle = await open(temporary, "wx", 0o700);
     const hash = createHash("sha256");
     let received = 0;
@@ -240,7 +294,7 @@ export async function stagePortableUpdate({
       signal?.throwIfAborted();
       const chunk = Buffer.from(rawChunk);
       received += chunk.length;
-      if (received > MAX_PORTABLE_BYTES || (portableAsset.size && received > portableAsset.size)) {
+      if (received > MAX_PORTABLE_BYTES || received > portableAsset.size) {
         fail("download-too-large", "The portable executable exceeded its declared size.");
       }
       hash.update(chunk);
@@ -249,7 +303,7 @@ export async function stagePortableUpdate({
     await temporaryHandle.sync();
     await temporaryHandle.close();
     temporaryHandle = undefined;
-    if (portableAsset.size && received !== portableAsset.size) fail("download-size-mismatch", "The portable executable size did not match release metadata.");
+    if (received !== portableAsset.size) fail("download-size-mismatch", "The portable executable size did not match release metadata.");
     const actualSha256 = hash.digest("hex");
     if (actualSha256 !== expectedSha256) fail("checksum-mismatch", "The portable executable failed SHA-256 verification.");
     if (portableAsset.digest && actualSha256 !== portableAsset.digest) fail("checksum-mismatch", "The portable executable failed the GitHub asset digest check.");
@@ -277,10 +331,11 @@ function replacementScript({ stagedPath, currentExecutable, expectedSha256, expe
     `$expected = ${powershellLiteral(expectedSha256)}`,
     `$expectedVersion = ${powershellLiteral(expectedVersion)}`,
     "$replaced = $false",
+    "$rolledBack = $false",
     `while (Get-Process -Id ${processId} -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 200 }`,
-    "$actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $staged).Hash.ToLowerInvariant()",
-    "if ($actual -ne $expected) { throw 'Staged update checksum mismatch.' }",
     "try {",
+    "  $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $staged).Hash.ToLowerInvariant()",
+    "  if ($actual -ne $expected) { throw 'Staged update checksum mismatch.' }",
     "  [System.IO.File]::Replace($staged, $target, $backup, $true)",
     "  $replaced = $true",
     "  $reportedVersion = (& $target --version 2>$null | Select-Object -First 1)",
@@ -291,11 +346,15 @@ function replacementScript({ stagedPath, currentExecutable, expectedSha256, expe
     "  if ($replaced -and (Test-Path -LiteralPath $backup) -and (Test-Path -LiteralPath $target)) {",
     "    [System.IO.File]::Replace($backup, $target, $failed, $true)",
     "    Remove-Item -LiteralPath $failed -Force -ErrorAction SilentlyContinue",
+    "    $rolledBack = $true",
     "  } elseif ((Test-Path -LiteralPath $backup) -and -not (Test-Path -LiteralPath $target)) {",
     "    Move-Item -LiteralPath $backup -Destination $target",
+    "    $rolledBack = $true",
     "  }",
+    "  if ($rolledBack -or (-not $replaced -and (Test-Path -LiteralPath $target))) { Start-Process -FilePath $target }",
     "  throw",
     "} finally {",
+    "  Remove-Item -LiteralPath $staged -Force -ErrorAction SilentlyContinue",
     "  Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue",
     "}",
     "",
@@ -315,18 +374,19 @@ export async function launchPortableReplacement({
     timer.unref();
   },
 } = {}) {
-  if (platform !== "win32") fail("install-unsupported", "Automatic portable replacement is only supported on Windows.");
   const { executable, target: staged } = assertStagingTarget(currentExecutable, stagedPath);
-  if (await sha256File(staged) !== expectedSha256) fail("checksum-mismatch", "The staged executable changed after verification.");
-  const nonce = randomBytes(8).toString("hex");
-  const helper = path.join(path.dirname(executable), `.${path.basename(executable)}.update-${version}-${nonce}.ps1`);
-  const backup = path.join(path.dirname(executable), `.${path.basename(executable)}.rollback-${version}-${nonce}`);
-  const failed = path.join(path.dirname(executable), `.${path.basename(executable)}.failed-${version}-${nonce}`);
-  assertStagingTarget(executable, helper);
-  assertStagingTarget(executable, backup);
-  assertStagingTarget(executable, failed);
-  const powershell = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+  let helper;
   try {
+    if (platform !== "win32") fail("install-unsupported", "Automatic portable replacement is only supported on Windows.");
+    if (await sha256File(staged) !== expectedSha256) fail("checksum-mismatch", "The staged executable changed after verification.");
+    const nonce = randomBytes(8).toString("hex");
+    helper = path.join(path.dirname(executable), `.${path.basename(executable)}.update-${version}-${nonce}.ps1`);
+    const backup = path.join(path.dirname(executable), `.${path.basename(executable)}.rollback-${version}-${nonce}`);
+    const failed = path.join(path.dirname(executable), `.${path.basename(executable)}.failed-${version}-${nonce}`);
+    assertStagingTarget(executable, helper);
+    assertStagingTarget(executable, backup);
+    assertStagingTarget(executable, failed);
+    const powershell = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
     await writeFile(helper, replacementScript({ stagedPath: staged, currentExecutable: executable, expectedSha256, expectedVersion: version, backupPath: backup, failedPath: failed, processId }), { flag: "wx", encoding: "utf8" });
     const child = spawnImpl(powershell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", helper], {
       detached: true,
@@ -341,7 +401,7 @@ export async function launchPortableReplacement({
     scheduleExit();
     return { status: "restarting", version };
   } catch (error) {
-    await Promise.all([rm(helper, { force: true }), rm(staged, { force: true })]);
+    await Promise.all([helper ? rm(helper, { force: true }) : Promise.resolve(), rm(staged, { force: true })]);
     throw error;
   }
 }

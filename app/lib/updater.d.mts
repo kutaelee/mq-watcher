@@ -27,6 +27,8 @@ export interface UpdateCheck {
 
 export const RELEASE_API_URL: string;
 export const RELEASE_PAGE_PREFIX: string;
+export function createInstallToken(): string;
+export function authorizeInstallRequest(request: Request, expectedToken: string): boolean;
 export function parseSemver(value: string): { raw: string; major: bigint; minor: bigint; patch: bigint; prerelease: string[] };
 export function compareSemver(left: string, right: string): number;
 export function checkForUpdate(options: {

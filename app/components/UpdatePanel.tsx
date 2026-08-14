@@ -11,6 +11,7 @@ type UpdateState = {
   releaseUrl?: string;
   mode?: "source" | "npm" | "portable";
   canInstall?: boolean;
+  installToken?: string;
   reason?: string | null;
   error?: { code?: string; message?: string };
 };
@@ -92,7 +93,10 @@ export function UpdatePanel({ locale }: { locale: Locale }) {
     try {
       const response = await fetch("/api/update", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-MQ-Watcher-Install-Token": state.installToken || "",
+        },
         body: JSON.stringify({ action: "install" }),
         signal: controller.signal,
       });
@@ -123,7 +127,7 @@ export function UpdatePanel({ locale }: { locale: Locale }) {
       {state.currentVersion && state.latestVersion ? <small>{withValues(labels.current, state)}</small> : null}
       <div className="update-panel-actions">
         {state.status === "checking" ? <LoaderCircle className="spin" size={15} /> : null}
-        {state.status === "update-available" && state.canInstall && !installing ? <button onClick={install}><Download size={13} />{labels.install}</button> : null}
+        {state.status === "update-available" && state.canInstall && state.installToken && !installing ? <button onClick={install}><Download size={13} />{labels.install}</button> : null}
         {installing ? <button onClick={() => requestRef.current?.abort()}><X size={13} />{labels.cancel}</button> : null}
         {state.releaseUrl ? <a href={state.releaseUrl} target="_blank" rel="noreferrer"><ExternalLink size={13} />{labels.release}</a> : null}
         {state.status === "error" ? <button onClick={check}><RefreshCw size={13} />{labels.check}</button> : null}

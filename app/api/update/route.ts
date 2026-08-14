@@ -1,6 +1,8 @@
 import packageMetadata from "../../../package.json";
 import {
+  authorizeInstallRequest,
   checkForUpdate,
+  createInstallToken,
   installPortableUpdate,
   UpdaterError,
   type DistributionMode,
@@ -15,6 +17,7 @@ const RESPONSE_HEADERS = {
   "Content-Type": "application/json; charset=utf-8",
   "X-Content-Type-Options": "nosniff",
 };
+const INSTALL_TOKEN = createInstallToken();
 
 function runtimeInfo() {
   const requestedMode = process.env.MQ_WATCHER_DISTRIBUTION_MODE;
@@ -43,19 +46,6 @@ function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: RESPONSE_HEADERS });
 }
 
-function isLoopbackMutation(request: Request) {
-  const site = request.headers.get("sec-fetch-site");
-  if (site && !["same-origin", "same-site", "none"].includes(site)) return false;
-  const origin = request.headers.get("origin");
-  if (!origin) return true;
-  try {
-    const hostname = new URL(origin).hostname;
-    return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]";
-  } catch {
-    return false;
-  }
-}
-
 function safeError(error: unknown) {
   if (error instanceof UpdaterError) return { code: error.code, message: error.message };
   if (error instanceof DOMException && error.name === "AbortError") return { code: "cancelled", message: "The update was cancelled." };
@@ -70,14 +60,14 @@ export async function GET(request: Request) {
       mode: runtime.mode,
       signal: request.signal,
     });
-    return json(publicCheck(update));
+    return json({ ...publicCheck(update), installToken: INSTALL_TOKEN });
   } catch (error) {
     return json({ status: "error", error: safeError(error) }, 502);
   }
 }
 
 export async function POST(request: Request) {
-  if (!isLoopbackMutation(request)) return json({ status: "error", error: { code: "forbidden", message: "Cross-site update requests are not allowed." } }, 403);
+  if (!authorizeInstallRequest(request, INSTALL_TOKEN)) return json({ status: "error", error: { code: "forbidden", message: "Cross-site or unauthorized update requests are not allowed." } }, 403);
   if (!/^application\/json(?:;|$)/i.test(request.headers.get("content-type") || "")) {
     return json({ status: "error", error: { code: "invalid-request", message: "Expected an application/json request." } }, 415);
   }
