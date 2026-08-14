@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -55,17 +55,90 @@ function responseAt(url, body, init) {
   return response;
 }
 
-function commandFile(version, markerName) {
-  return [
-    "@echo off",
-    "if \"%~1\"==\"--version\" (",
-    `  echo ${version}`,
-    "  exit /b 0",
-    ")",
-    `> "%~dp0${markerName}" echo restarted`,
-    "exit /b 0",
+function powershellLiteral(value) {
+  return `'${String(value).replaceAll("'", "''")}'`;
+}
+
+async function compileExecutableFixture(root, fileName, version, markerName) {
+  const sourcePath = path.join(root, `${fileName}.cs`);
+  const outputPath = path.join(root, fileName);
+  const source = [
+    "using System;",
+    "using System.IO;",
+    "using System.Reflection;",
+    "public static class Program {",
+    "  public static int Main(string[] args) {",
+    `    if (args.Length > 0 && args[0] == "--version") { Console.WriteLine("${version}"); Console.Out.Flush(); Environment.Exit(0); }`,
+    "    var directory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);",
+    `    File.WriteAllText(Path.Combine(directory, "${markerName}"), "restarted");`,
+    "    return 0;",
+    "  }",
+    "}",
     "",
   ].join("\r\n");
+  await writeFile(sourcePath, source);
+  try {
+    const powershell = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+    const command = `Add-Type -Path ${powershellLiteral(sourcePath)} -OutputAssembly ${powershellLiteral(outputPath)} -OutputType ConsoleApplication`;
+    const result = spawnSync(powershell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command], {
+      encoding: "utf8",
+      windowsHide: true,
+    });
+    assert.equal(result.status, 0, `fixture compilation failed:\n${result.stderr || result.stdout}`);
+    const smoke = spawnSync(outputPath, ["--version"], { encoding: "utf8", windowsHide: true });
+    assert.equal(smoke.status, 0, `fixture version smoke failed:\n${smoke.stderr || smoke.stdout}`);
+    assert.equal(smoke.stdout.trim(), version);
+    return outputPath;
+  } finally {
+    await rm(sourcePath, { force: true });
+  }
+}
+
+async function compileHangingVersionFixture(root, fileName, version) {
+  const sourcePath = path.join(root, `${fileName}.cs`);
+  const outputPath = path.join(root, fileName);
+  const source = [
+    "using System;",
+    "using System.Diagnostics;",
+    "using System.IO;",
+    "using System.Reflection;",
+    "using System.Threading;",
+    "public static class Program {",
+    "  public static int Main(string[] args) {",
+    "    var directory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);",
+    "    if (args.Length > 0 && args[0] == \"--child\") {",
+    "      File.WriteAllText(Path.Combine(directory, \"version-child.pid\"), Process.GetCurrentProcess().Id.ToString());",
+    "      Thread.Sleep(30000);",
+    "      return 0;",
+    "    }",
+    "    if (args.Length > 0 && args[0] == \"--version\") {",
+    "      var child = new ProcessStartInfo(Assembly.GetExecutingAssembly().Location, \"--child\");",
+    "      child.UseShellExecute = false;",
+    "      child.CreateNoWindow = true;",
+    "      Process.Start(child);",
+    `      Console.WriteLine("${version}");`,
+    "      Console.Out.Flush();",
+    "      Thread.Sleep(30000);",
+    "      return 0;",
+    "    }",
+    "    return 0;",
+    "  }",
+    "}",
+    "",
+  ].join("\r\n");
+  await writeFile(sourcePath, source);
+  try {
+    const powershell = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+    const command = `Add-Type -Path ${powershellLiteral(sourcePath)} -OutputAssembly ${powershellLiteral(outputPath)} -OutputType ConsoleApplication`;
+    const result = spawnSync(powershell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command], {
+      encoding: "utf8",
+      windowsHide: true,
+    });
+    assert.equal(result.status, 0, `hanging fixture compilation failed:\n${result.stderr || result.stdout}`);
+    return outputPath;
+  } finally {
+    await rm(sourcePath, { force: true });
+  }
 }
 
 async function waitFor(predicate, timeoutMs = 10_000) {
@@ -353,7 +426,10 @@ test("generated replacement helper smoke-checks the new version and rolls back b
   const helperName = (await readdir(root)).find((name) => name.endsWith(".ps1"));
   assert.ok(helperName);
   const helper = await readFile(path.join(root, helperName), "utf8");
-  assert.match(helper, /& \$target --version/);
+  assert.match(helper, /System\.Diagnostics\.ProcessStartInfo/);
+  assert.match(helper, /\$versionProcess\.WaitForExit\(10000\)/);
+  assert.match(helper, /taskkill\.exe/);
+  assert.match(helper, /\/PID \$versionProcess\.Id \/T \/F/);
   assert.match(helper, /\$reportedVersion\.Trim\(\) -ne \$expectedVersion/);
   assert.match(helper, /\[System\.IO\.File\]::Replace\(\$backup, \$target, \$failed, \$true\)/);
   assert.match(helper, /\$rolledBack -or \(-not \$replaced/);
@@ -366,28 +442,31 @@ test("generated replacement helper smoke-checks the new version and rolls back b
   assert.deepEqual(await readFile(current), oldBinary);
 });
 
-test("real Windows helper replaces, version-checks, restarts, and cleans a command fixture", { skip: process.platform !== "win32" }, async (context) => {
+test("real Windows helper replaces, version-checks, restarts, and cleans an executable fixture", { skip: process.platform !== "win32" }, async (context) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "mq-watcher-updater-real-success-"));
   context.after(() => rm(root, { recursive: true, force: true }));
-  const current = path.join(root, "mq-watcher.cmd");
-  const stagedPath = path.join(root, ".mq-watcher.cmd.update-1.2.0-real.staged");
-  const oldScript = commandFile("1.1.0", "old-restart.marker");
-  const newScript = commandFile("1.2.0", "new-restart.marker");
-  await writeFile(current, oldScript);
-  await writeFile(stagedPath, newScript);
+  const current = await compileExecutableFixture(root, "mq-watcher.exe", "1.1.0", "old-restart.marker");
+  const compiledReplacement = await compileExecutableFixture(root, "replacement.exe", "1.2.0", "new-restart.marker");
+  const stagedPath = path.join(root, ".mq-watcher.exe.update-1.2.0-real.staged");
+  await rename(compiledReplacement, stagedPath);
+  const oldBinary = await readFile(current);
+  const newBinary = await readFile(stagedPath);
   const dummy = spawn(process.execPath, ["-e", "setTimeout(() => {}, 30000)"], { windowsHide: true, stdio: "ignore" });
   let helper;
   let helperDone;
+  let helperOutput = "";
   try {
     const spawnImpl = (command, args) => {
-      helper = spawn(command, args, { windowsHide: true, stdio: "ignore" });
+      helper = spawn(command, args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+      helper.stdout.on("data", (chunk) => { helperOutput += String(chunk); });
+      helper.stderr.on("data", (chunk) => { helperOutput += String(chunk); });
       helperDone = new Promise((resolve) => helper.once("exit", resolve));
       return helper;
     };
     await launchPortableReplacement({
       stagedPath,
       currentExecutable: current,
-      expectedSha256: sha256(Buffer.from(newScript)),
+      expectedSha256: sha256(newBinary),
       version: "1.2.0",
       platform: "win32",
       processId: dummy.pid,
@@ -397,25 +476,26 @@ test("real Windows helper replaces, version-checks, restarts, and cleans a comma
     helper.ref();
     dummy.kill();
     await helperDone;
-    assert.equal(helper.exitCode, 0);
+    assert.equal(helper.exitCode, 0, helperOutput);
     assert.equal((await readdir(root)).includes("new-restart.marker"), true, "the helper must not exit before a fast restarted target completes");
-    assert.equal(await readFile(current, "utf8"), newScript);
-    assert.deepEqual((await readdir(root)).sort(), ["mq-watcher.cmd", "new-restart.marker"]);
+    assert.deepEqual(await readFile(current), newBinary);
+    assert.notDeepEqual(await readFile(current), oldBinary);
+    assert.deepEqual((await readdir(root)).sort(), ["mq-watcher.exe", "new-restart.marker"]);
   } finally {
     if (dummy.exitCode === null) dummy.kill();
     if (helper?.exitCode === null) helper.kill();
   }
 });
 
-test("real Windows helper rolls back a wrong version, restarts the old command, and cleans residue", { skip: process.platform !== "win32" }, async (context) => {
+test("real Windows helper rolls back a wrong version, restarts the old executable, and cleans residue", { skip: process.platform !== "win32" }, async (context) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "mq-watcher-updater-real-rollback-"));
   context.after(() => rm(root, { recursive: true, force: true }));
-  const current = path.join(root, "mq-watcher.cmd");
-  const stagedPath = path.join(root, ".mq-watcher.cmd.update-1.2.0-real.staged");
-  const oldScript = commandFile("1.1.0", "old-restart.marker");
-  const wrongScript = commandFile("9.9.9", "wrong-restart.marker");
-  await writeFile(current, oldScript);
-  await writeFile(stagedPath, wrongScript);
+  const current = await compileExecutableFixture(root, "mq-watcher.exe", "1.1.0", "old-restart.marker");
+  const compiledReplacement = await compileExecutableFixture(root, "replacement.exe", "9.9.9", "wrong-restart.marker");
+  const stagedPath = path.join(root, ".mq-watcher.exe.update-1.2.0-real.staged");
+  await rename(compiledReplacement, stagedPath);
+  const oldBinary = await readFile(current);
+  const wrongBinary = await readFile(stagedPath);
   const dummy = spawn(process.execPath, ["-e", "setTimeout(() => {}, 30000)"], { windowsHide: true, stdio: "ignore" });
   let helper;
   let helperDone;
@@ -428,7 +508,7 @@ test("real Windows helper rolls back a wrong version, restarts the old command, 
     await launchPortableReplacement({
       stagedPath,
       currentExecutable: current,
-      expectedSha256: sha256(Buffer.from(wrongScript)),
+      expectedSha256: sha256(wrongBinary),
       version: "1.2.0",
       platform: "win32",
       processId: dummy.pid,
@@ -440,23 +520,23 @@ test("real Windows helper rolls back a wrong version, restarts the old command, 
     await helperDone;
     await waitFor(async () => (await readdir(root)).includes("old-restart.marker"));
     assert.equal(helper.exitCode, 1);
-    assert.equal(await readFile(current, "utf8"), oldScript);
-    assert.deepEqual((await readdir(root)).sort(), ["mq-watcher.cmd", "old-restart.marker"]);
+    assert.deepEqual(await readFile(current), oldBinary);
+    assert.deepEqual((await readdir(root)).sort(), ["mq-watcher.exe", "old-restart.marker"]);
   } finally {
     if (dummy.exitCode === null) dummy.kill();
     if (helper?.exitCode === null) helper.kill();
   }
 });
 
-test("real Windows helper rejects post-spawn tampering, restarts the unchanged target, and cleans residue", { skip: process.platform !== "win32" }, async (context) => {
+test("real Windows helper rejects post-spawn tampering, restarts the unchanged executable, and cleans residue", { skip: process.platform !== "win32" }, async (context) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "mq-watcher-updater-real-tamper-"));
   context.after(() => rm(root, { recursive: true, force: true }));
-  const current = path.join(root, "mq-watcher.cmd");
-  const stagedPath = path.join(root, ".mq-watcher.cmd.update-1.2.0-real.staged");
-  const oldScript = commandFile("1.1.0", "old-restart.marker");
-  const verifiedScript = commandFile("1.2.0", "new-restart.marker");
-  await writeFile(current, oldScript);
-  await writeFile(stagedPath, verifiedScript);
+  const current = await compileExecutableFixture(root, "mq-watcher.exe", "1.1.0", "old-restart.marker");
+  const compiledReplacement = await compileExecutableFixture(root, "replacement.exe", "1.2.0", "new-restart.marker");
+  const stagedPath = path.join(root, ".mq-watcher.exe.update-1.2.0-real.staged");
+  await rename(compiledReplacement, stagedPath);
+  const oldBinary = await readFile(current);
+  const verifiedBinary = await readFile(stagedPath);
   const dummy = spawn(process.execPath, ["-e", "setTimeout(() => {}, 30000)"], { windowsHide: true, stdio: "ignore" });
   let helper;
   let helperDone;
@@ -469,7 +549,7 @@ test("real Windows helper rejects post-spawn tampering, restarts the unchanged t
     await launchPortableReplacement({
       stagedPath,
       currentExecutable: current,
-      expectedSha256: sha256(Buffer.from(verifiedScript)),
+      expectedSha256: sha256(verifiedBinary),
       version: "1.2.0",
       platform: "win32",
       processId: dummy.pid,
@@ -482,8 +562,51 @@ test("real Windows helper rejects post-spawn tampering, restarts the unchanged t
     await helperDone;
     await waitFor(async () => (await readdir(root)).includes("old-restart.marker"));
     assert.equal(helper.exitCode, 1);
-    assert.equal(await readFile(current, "utf8"), oldScript);
-    assert.deepEqual((await readdir(root)).sort(), ["mq-watcher.cmd", "old-restart.marker"]);
+    assert.deepEqual(await readFile(current), oldBinary);
+    assert.deepEqual((await readdir(root)).sort(), ["mq-watcher.exe", "old-restart.marker"]);
+  } finally {
+    if (dummy.exitCode === null) dummy.kill();
+    if (helper?.exitCode === null) helper.kill();
+  }
+});
+
+test("real Windows helper kills a timed-out version process tree before rollback", { skip: process.platform !== "win32" }, async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mq-watcher-updater-real-timeout-"));
+  context.after(() => rm(root, { recursive: true, force: true }));
+  const current = await compileExecutableFixture(root, "mq-watcher.exe", "1.1.0", "old-restart.marker");
+  const compiledReplacement = await compileHangingVersionFixture(root, "replacement.exe", "1.2.0");
+  const stagedPath = path.join(root, ".mq-watcher.exe.update-1.2.0-real.staged");
+  await rename(compiledReplacement, stagedPath);
+  const oldBinary = await readFile(current);
+  const replacementBinary = await readFile(stagedPath);
+  const dummy = spawn(process.execPath, ["-e", "setTimeout(() => {}, 30000)"], { windowsHide: true, stdio: "ignore" });
+  let helper;
+  let helperDone;
+  try {
+    const spawnImpl = (command, args) => {
+      helper = spawn(command, args, { windowsHide: true, stdio: "ignore" });
+      helperDone = new Promise((resolve) => helper.once("exit", resolve));
+      return helper;
+    };
+    await launchPortableReplacement({
+      stagedPath,
+      currentExecutable: current,
+      expectedSha256: sha256(replacementBinary),
+      version: "1.2.0",
+      platform: "win32",
+      processId: dummy.pid,
+      spawnImpl,
+      scheduleExit: () => {},
+    });
+    helper.ref();
+    dummy.kill();
+    await helperDone;
+    await waitFor(async () => (await readdir(root)).includes("old-restart.marker"));
+    const childPid = Number(await readFile(path.join(root, "version-child.pid"), "utf8"));
+    assert.equal(helper.exitCode, 1);
+    assert.deepEqual(await readFile(current), oldBinary);
+    assert.throws(() => process.kill(childPid, 0));
+    assert.deepEqual((await readdir(root)).sort(), ["mq-watcher.exe", "old-restart.marker", "version-child.pid"]);
   } finally {
     if (dummy.exitCode === null) dummy.kill();
     if (helper?.exitCode === null) helper.kill();
