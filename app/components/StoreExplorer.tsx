@@ -50,8 +50,8 @@ import {
   useState,
 } from "react";
 import { I18nProvider, useI18n, type Locale } from "@/app/lib/i18n";
-import { readScanCache, readWorkbenchState, writeScanCache, writeWorkbenchState } from "@/app/lib/scan-cache";
-import { closeSession, findReusableSession, MAX_STORE_SESSIONS, restoreSessions, sessionId } from "@/app/lib/workbench.mjs";
+import { enqueueScanCacheWrite, readScanCache, readWorkbenchState, writeScanCache, writeWorkbenchState } from "@/app/lib/scan-cache";
+import { buildStoreSignature, closeSession, findReusableSession, MAX_STORE_SESSIONS, restoreSessions, sessionId, SessionResourceLedger, SignatureReservationRegistry } from "@/app/lib/workbench.mjs";
 import type {
   CasePin,
   Confidence,
@@ -114,6 +114,8 @@ type StoreSession = {
   error: string;
   openedAt: string;
   restored: boolean;
+  sourceAccess: "granted" | "cached-only";
+  scanToken?: string;
 };
 
 type TableColumn<T> = {
@@ -140,7 +142,7 @@ const EMPTY_PROGRESS: WorkerProgress = {
   totalBytes: 0,
 };
 
-const SCANNER_VERSION = "3";
+const SCANNER_VERSION = "4";
 const NAVIGATION: Array<{ id: ViewId; icon: typeof Gauge }> = [
   { id: "overview", icon: Gauge },
   { id: "compare", icon: GitCompareArrows },
@@ -262,24 +264,25 @@ function localeCode(locale: Locale) {
 function makePinCandidate(selected: Selected, result: ScanResult | null): Omit<CasePin, "pinnedAt"> | null {
   if (!selected || !result) return null;
   const base = { storeSignature: result.signature, storeName: result.directoryName };
-  if (selected.type === "destination") return { ...base, id: selected.value.id, kind: selected.type, label: selected.value.name, file: selected.value.source, offset: null, confidence: selected.value.confidence };
-  if (selected.type === "subscription") return { ...base, id: selected.value.id, kind: selected.type, label: selected.value.rawId, file: selected.value.relatedStore, offset: null, confidence: selected.value.confidence };
-  if (selected.type === "message") return { ...base, id: selected.value.id, kind: selected.type, label: `${selected.value.destination} @ ${formatOffset(selected.value.offset)}`, file: selected.value.journal, offset: selected.value.offset, confidence: selected.value.confidence };
-  if (selected.type === "correlation") return { ...base, id: selected.value.id, kind: selected.type, label: selected.value.primaryId, file: selected.value.journal, offset: selected.value.offset, confidence: selected.value.confidence };
-  if (selected.type === "record") return { ...base, id: `${selected.value.file}:${selected.value.location.offset}`, kind: selected.type, label: selected.value.command, file: selected.value.file, offset: selected.value.location.offset, confidence: selected.value.confidence };
-  if (selected.type === "raw") return { ...base, id: selected.value.id, kind: selected.type, label: selected.value.value, file: selected.value.file, offset: selected.value.offset, confidence: selected.value.confidence };
-  return { ...base, id: selected.value.path, kind: selected.type, label: selected.value.path, file: selected.value.path, offset: null, confidence: selected.value.confidence };
+  if (selected.type === "destination") return { ...base, id: selected.value.id, semanticKey: `destination:${selected.value.type}:${selected.value.name}`, kind: selected.type, label: selected.value.name, provenance: { file: selected.value.source, offset: null }, confidence: selected.value.confidence };
+  if (selected.type === "subscription") return { ...base, id: selected.value.id, semanticKey: `subscription:${selected.value.rawId}`, kind: selected.type, label: selected.value.rawId, provenance: { file: selected.value.relatedStore, offset: null }, confidence: selected.value.confidence };
+  if (selected.type === "message") { const semantic = selected.value.relatedId !== "Unknown" ? selected.value.relatedId : `${selected.value.destination}:${selected.value.detectedType}:${selected.value.operation}`; return { ...base, id: selected.value.id, semanticKey: `message:${semantic}`, kind: selected.type, label: `${selected.value.destination} @ ${formatOffset(selected.value.offset)}`, provenance: { file: selected.value.journal, offset: selected.value.offset }, confidence: selected.value.confidence }; }
+  if (selected.type === "correlation") return { ...base, id: selected.value.id, semanticKey: `correlation:${selected.value.kind}:${selected.value.primaryId}`, kind: selected.type, label: selected.value.primaryId, provenance: { file: selected.value.journal, offset: selected.value.offset }, confidence: selected.value.confidence };
+  if (selected.type === "record") { const semanticKey = selected.value.messageId ? `message:${selected.value.messageId}` : selected.value.subscriptionKey ? `subscription:${selected.value.subscriptionKey}` : selected.value.transactionId ? `transaction:${selected.value.transactionId}` : `record:${selected.value.command}:${selected.value.destination?.name ?? "Unknown"}`; return { ...base, id: `${selected.value.file}:${selected.value.location.offset}`, semanticKey, kind: selected.type, label: selected.value.command, provenance: { file: selected.value.file, offset: selected.value.location.offset }, confidence: selected.value.confidence }; }
+  if (selected.type === "raw") return { ...base, id: selected.value.id, semanticKey: `raw-string:${selected.value.value}`, kind: selected.type, label: selected.value.value, provenance: { file: selected.value.file, offset: selected.value.offset }, confidence: selected.value.confidence };
+  return { ...base, id: selected.value.path, semanticKey: `source-file:${selected.value.path}`, kind: selected.type, label: selected.value.path, provenance: { file: selected.value.path, offset: null }, confidence: selected.value.confidence };
 }
 
-async function collectDirectoryFiles(handle: FileSystemDirectoryHandle) {
+async function collectDirectoryFiles(handle: FileSystemDirectoryHandle, signal?: AbortSignal) {
   const collected: FileInput[] = [];
   async function walk(directory: FileSystemDirectoryHandle, prefix: string) {
     const entries: Array<[string, FileSystemHandle]> = [];
     for await (const entry of (directory as unknown as {
       entries(): AsyncIterableIterator<[string, FileSystemHandle]>;
-    }).entries()) entries.push(entry);
+    }).entries()) { signal?.throwIfAborted(); entries.push(entry); }
     entries.sort(([a], [b]) => a.localeCompare(b));
     for (const [name, child] of entries) {
+      signal?.throwIfAborted();
       const relativePath = prefix ? `${prefix}/${name}` : name;
       if (child.kind === "directory") await walk(child as FileSystemDirectoryHandle, relativePath);
       else collected.push({ relativePath, file: await (child as FileSystemFileHandle).getFile() });
@@ -287,19 +290,6 @@ async function collectDirectoryFiles(handle: FileSystemDirectoryHandle) {
   }
   await walk(handle, "");
   return collected;
-}
-
-function makeSignature(directoryName: string, files: FileInput[]) {
-  const seed = files
-    .map(({ relativePath, file }) => `${relativePath}:${file.size}:${file.lastModified}`)
-    .sort()
-    .join("|");
-  let hash = 2166136261;
-  for (let index = 0; index < seed.length; index += 1) {
-    hash ^= seed.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return `${SCANNER_VERSION}:${directoryName}:${files.length}:${(hash >>> 0).toString(16)}`;
 }
 
 export default function StoreExplorer() {
@@ -320,6 +310,9 @@ function ExplorerApp() {
   const [detailOpen, setDetailOpen] = useState(true);
   const [dark, setDark] = useState(false);
   const workersRef = useRef(new Map<string, Worker>());
+  const sessionsRef = useRef<StoreSession[]>(sessions);
+  const reservationsRef = useRef(new SignatureReservationRegistry());
+  const resourcesRef = useRef(new SessionResourceLedger());
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? null;
   const result = activeSession?.result ?? null;
   const activeView = activeSession?.activeView ?? "overview";
@@ -345,6 +338,8 @@ function ExplorerApp() {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
     localStorage.setItem("mq-watcher-theme", dark ? "dark" : "light");
   }, [dark]);
+
+  useEffect(() => { sessionsRef.current = sessions; }, [sessions]);
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -380,7 +375,7 @@ function ExplorerApp() {
   }, [sessions, activeSessionId, restored]);
 
   useEffect(() => () => {
-    workersRef.current.forEach((worker) => worker.terminate());
+    resourcesRef.current.cleanupAll();
     workersRef.current.clear();
   }, []);
 
@@ -394,30 +389,30 @@ function ExplorerApp() {
       setError(t("error.unsupported"));
       return;
     }
+    const controller = new AbortController();
     try {
       setIsPreparing(true);
       const handle = await window.showDirectoryPicker({ mode: "read" });
-      const files = await collectDirectoryFiles(handle);
-      const signature = makeSignature(handle.name, files);
-      const duplicate = findReusableSession(sessions, signature);
+      const files = await collectDirectoryFiles(handle, controller.signal);
+      const signature = await buildStoreSignature(files, SCANNER_VERSION);
+      const duplicate = findReusableSession(sessionsRef.current, signature);
       if (duplicate) {
         setActiveSessionId(duplicate.id);
+        controller.abort();
         setIsPreparing(false);
         return;
       }
-      if (sessions.length >= MAX_STORE_SESSIONS) {
+      if (sessionsRef.current.length >= MAX_STORE_SESSIONS) {
         setError(t("tabs.limit", { count: MAX_STORE_SESSIONS }));
+        controller.abort();
         setIsPreparing(false);
         return;
       }
       const id = sessionId(signature);
-      const cached = await readScanCache(signature).catch(() => null);
-      if (cached) {
-        setSessions((current) => [...current, {
-          id, signature, name: handle.name, result: cached, activeView: "overview", selected: null,
-          status: "ready", progress: EMPTY_PROGRESS, error: "", openedAt: new Date().toISOString(), restored: true,
-        }]);
+      const reservation = reservationsRef.current.reserve(signature);
+      if (!reservation.accepted) {
         setActiveSessionId(id);
+        controller.abort();
         setIsPreparing(false);
         return;
       }
@@ -426,41 +421,71 @@ function ExplorerApp() {
         fileCount: files.length,
         totalBytes: files.reduce((sum, item) => sum + item.file.size, 0),
       };
-      setSessions((current) => [...current, {
+      const placeholder: StoreSession = {
         id, signature, name: handle.name, result: null, activeView: "overview", selected: null,
         status: "scanning", progress: initialProgress, error: "", openedAt: new Date().toISOString(), restored: false,
-      }]);
+        sourceAccess: "granted", scanToken: reservation.token,
+      };
+      if (!findReusableSession(sessionsRef.current, signature)) sessionsRef.current = [...sessionsRef.current, placeholder];
+      setSessions(sessionsRef.current);
       setActiveSessionId(id);
+      resourcesRef.current.add(id, { kind: "controller", value: controller });
+      const cached = await readScanCache(signature).catch(() => null);
+      if (!reservationsRef.current.isCurrent(signature, reservation.token)) return;
+      if (cached) {
+        setSessions((current) => current.map((session) => session.id === id && session.scanToken === reservation.token ? { ...session, result: cached, status: "ready", restored: true, sourceAccess: "granted", scanToken: undefined } : session));
+        reservationsRef.current.release(signature, reservation.token);
+        resourcesRef.current.cleanup(id);
+        setIsPreparing(false);
+        return;
+      }
       const worker = new Worker("/store-scanner.worker.js", { type: "module" });
       workersRef.current.set(id, worker);
+      resourcesRef.current.add(id, { kind: "worker", value: worker });
+      const isCurrent = () => reservationsRef.current.isCurrent(signature, reservation.token) && sessionsRef.current.some((session) => session.id === id && session.scanToken === reservation.token);
       worker.onmessage = async (event: MessageEvent<WorkerMessage>) => {
-        if (event.data.type === "progress") updateSession(id, { progress: event.data });
+        if (!isCurrent()) return;
+        if (event.data.type === "progress") setSessions((current) => current.map((session) => session.id === id && session.scanToken === reservation.token ? { ...session, progress: event.data as WorkerProgress } : session));
         if (event.data.type === "complete") {
-          updateSession(id, { result: event.data.result, activeView: "overview", status: "ready", restored: false });
-          worker.terminate();
+          const completed = event.data.result;
+          setSessions((current) => current.map((session) => session.id === id && session.scanToken === reservation.token ? { ...session, result: completed, activeView: "overview", status: "ready", restored: false, sourceAccess: "granted" } : session));
+          await enqueueScanCacheWrite(
+            signature,
+            reservation.token,
+            (candidateSignature, candidateToken) => reservationsRef.current.isCurrent(candidateSignature, candidateToken),
+            () => writeScanCache(completed),
+          ).catch(() => false);
+          if (!isCurrent()) return;
+          setSessions((current) => current.map((session) => session.id === id && session.scanToken === reservation.token ? { ...session, scanToken: undefined } : session));
+          reservationsRef.current.release(signature, reservation.token);
+          resourcesRef.current.cleanup(id);
           workersRef.current.delete(id);
-          await writeScanCache(event.data.result).catch(() => undefined);
         }
         if (event.data.type === "cancelled") {
-          worker.terminate();
+          reservationsRef.current.release(signature, reservation.token);
+          resourcesRef.current.cleanup(id);
           workersRef.current.delete(id);
           setSessions((current) => current.filter((session) => session.id !== id));
           setActiveSessionId((current) => current === id ? null : current);
         }
         if (event.data.type === "error") {
-          updateSession(id, { error: event.data.message, status: "error" });
-          worker.terminate();
+          setSessions((current) => current.map((session) => session.id === id && session.scanToken === reservation.token ? { ...session, error: event.data.message, status: "error", scanToken: undefined } : session));
+          reservationsRef.current.release(signature, reservation.token);
+          resourcesRef.current.cleanup(id);
           workersRef.current.delete(id);
         }
       };
       worker.onerror = (event) => {
-        updateSession(id, { error: event.message || t("error.scan"), status: "error" });
-        worker.terminate();
+        if (!isCurrent()) return;
+        setSessions((current) => current.map((session) => session.id === id && session.scanToken === reservation.token ? { ...session, error: event.message || t("error.scan"), status: "error", scanToken: undefined } : session));
+        reservationsRef.current.release(signature, reservation.token);
+        resourcesRef.current.cleanup(id);
         workersRef.current.delete(id);
       };
       setIsPreparing(false);
       worker.postMessage({ type: "scan", signature, directoryName: handle.name, files });
     } catch (caught) {
+      controller.abort();
       setIsPreparing(false);
       if (caught instanceof DOMException && caught.name === "AbortError") return;
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -485,7 +510,7 @@ function ExplorerApp() {
       const id = sessionId(demo.signature);
       setSessions((current) => [...current, {
         id, signature: demo.signature, name: demo.directoryName, result: demo, activeView: "overview", selected: null,
-        status: "ready", progress: EMPTY_PROGRESS, error: "", openedAt: new Date().toISOString(), restored: false,
+        status: "ready", progress: EMPTY_PROGRESS, error: "", openedAt: new Date().toISOString(), restored: false, sourceAccess: "cached-only",
       }]);
       setActiveSessionId(id);
     } catch (caught) {
@@ -518,9 +543,12 @@ function ExplorerApp() {
   const activeNavLabel = t(`nav.${activeView}`);
 
   const closeStore = (id: string) => {
-    workersRef.current.get(id)?.terminate();
+    const closing = sessionsRef.current.find((session) => session.id === id);
+    if (closing?.scanToken) reservationsRef.current.release(closing.signature, closing.scanToken);
+    resourcesRef.current.cleanup(id);
     workersRef.current.delete(id);
-    const next = closeSession(sessions, activeSessionId, id);
+    const next = closeSession(sessionsRef.current, activeSessionId, id);
+    sessionsRef.current = next.sessions;
     setSessions(next.sessions);
     setActiveSessionId(next.activeSessionId);
   };
@@ -565,7 +593,7 @@ function ExplorerApp() {
             <>
               <div className="source-name"><HardDrive size={15} /> {result.directoryName}</div>
               <div className="source-meta">{formatBytes(result.totals.bytes)} · {t("source.files", { count: result.files.length.toLocaleString(localeCode(locale)) })}</div>
-              <div className="source-flags"><Badge tone={result.storeKind === "Unknown Store Layout" ? "amber" : "blue"}>{displayStore(result, t).label}</Badge></div>
+              <div className="source-flags"><Badge tone={result.storeKind === "Unknown Store Layout" ? "amber" : "blue"}>{displayStore(result, t).label}</Badge><Badge tone={activeSession?.sourceAccess === "granted" ? "green" : "neutral"}>{t(activeSession?.sourceAccess === "granted" ? "source.accessGranted" : "source.cachedOnly")}</Badge></div>
             </>
           ) : <div className="source-empty">{t("source.none")}</div>}
           <Button className="source-button" onClick={openDirectory} disabled={isPreparing}>
@@ -622,14 +650,14 @@ function ExplorerApp() {
           ) : null}
 
           {error || activeSession?.error ? <div className="error-alert"><AlertCircle size={18} /><div><strong>{t("error.title")}</strong><p>{error || activeSession?.error}</p></div></div> : null}
-          {isPreparing || isScanning ? <ScanProgress progress={progress} percentage={percentage} preparing={isPreparing} onCancel={() => activeSessionId && workersRef.current.get(activeSessionId)?.postMessage({ type: "cancel" })} /> : null}
+          {isPreparing || isScanning ? <ScanProgress progress={progress} percentage={percentage} preparing={isPreparing} onCancel={() => activeSessionId && closeStore(activeSessionId)} /> : null}
           {!result && !isScanning && !isPreparing ? <EmptyExplorer onOpen={openDirectory} onDemo={loadDemo} /> : null}
 
           {result && !isScanning ? (
             <>
               {activeView === "overview" ? <Overview result={result} help={help} onHelp={setContextHelp} onNavigate={navigate} onSelect={selectItem} /> : null}
               {activeView === "compare" ? <SnapshotCompare sessions={sessions} /> : null}
-              {activeView === "case" ? <IncidentCase result={result} pinCandidate={makePinCandidate(selected, result)} /> : null}
+              {activeView === "case" ? <IncidentCase result={result} openResults={sessions.flatMap((session) => session.result ? [session.result] : [])} pinCandidate={makePinCandidate(selected, result)} /> : null}
               {activeView === "journals" ? <JournalExplorer result={result} /> : null}
               {activeView === "timeline" ? <EvidenceTimeline result={result} /> : null}
               {activeView === "export" ? <EvidenceExport result={result} sessions={sessions} /> : null}

@@ -185,6 +185,11 @@ code, pre, .mono-cell, .mono-value {
 .compare-summary span { display: block; margin-top: 3px; color: var(--text-soft); font-size: 10px; }
 .diff-delta { display: inline-block; margin-left: 6px; color: var(--muted); font: 600 9px var(--font-geist-mono), monospace; }
 .compare-no-diff { margin: 0; padding: 28px; color: var(--muted); text-align: center; font-size: 11px; }
+.identity-rules { padding: 12px 14px; }
+.identity-rules > strong { font-size: 10px; }
+.identity-rules > p { margin: 5px 0 9px; color: var(--text-soft); font-size: 9px; line-height: 1.55; }
+.identity-rules > div { display: flex; flex-wrap: wrap; gap: 5px; }
+.identity-rules code { padding: 4px 6px; border-radius: 5px; background: var(--panel-soft); font-size: 8px; }
 .case-layout { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 14px; align-items: start; }
 .case-list { position: sticky; top: calc(var(--topbar) + 58px); padding: 10px; }
 .case-list-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 5px 10px; border-bottom: 1px solid var(--border); }
@@ -215,6 +220,7 @@ code, pre, .mono-cell, .mono-value {
 .case-pins > div > div, .lead-list span { min-width: 0; flex: 1; }
 .case-pins strong, .case-pins small, .lead-list strong, .lead-list small { display: block; }
 .case-pins strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 9px var(--font-geist-mono), monospace; }
+.case-pins code { display: block; margin-top: 4px; overflow: hidden; color: var(--muted); font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
 .case-pins small, .lead-list small { margin-top: 3px; color: var(--muted); font-size: 8px; }
 .case-note-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
 .case-note-entry textarea { min-height: 68px; resize: vertical; }
@@ -224,6 +230,8 @@ code, pre, .mono-cell, .mono-value {
 .case-muted { margin: 9px 0 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
 .lead-thresholds { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .lead-thresholds code { padding: 5px 7px; border-radius: 6px; background: var(--panel-soft); color: var(--text-soft); font-size: 8px; }
+.lead-list p { margin: 5px 0 0; color: var(--text-soft); font-size: 8px; line-height: 1.5; }
+.lead-list p b { color: var(--text); }
 .journal-layout { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(310px, .9fr); gap: 14px; align-items: start; }
 .selected-row { background: var(--primary-soft) !important; }
 .journal-detail { position: sticky; top: calc(var(--topbar) + 58px); min-width: 0; padding: 16px; }
@@ -242,11 +250,14 @@ code, pre, .mono-cell, .mono-value {
 .timeline-toolbar select { height: 34px; padding: 0 9px; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--panel-soft); color: var(--text); font-size: 10px; }
 .timeline-card { padding: 0 16px; }
 .timeline-list { position: relative; }
-.timeline-list::before { content: ""; position: absolute; top: 20px; bottom: 20px; left: 20px; width: 1px; background: var(--border-strong); }
+.timeline-list::before { content: ""; position: absolute; top: 45px; bottom: 20px; left: 39px; width: 1px; background: var(--border-strong); }
+.timeline-journal { position: relative; z-index: 2; display: flex; align-items: center; gap: 7px; margin: 0 -16px; padding: 9px 16px; border-bottom: 1px solid var(--border); background: var(--panel-soft); }
+.timeline-journal strong { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 9px var(--font-geist-mono), monospace; }
+.timeline-journal span { color: var(--muted); font-size: 8px; }
 .timeline-event { position: relative; display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border); }
 .timeline-event:last-child { border-bottom: 0; }
 .timeline-marker { position: relative; z-index: 1; display: flex; justify-content: center; padding-top: 2px; }
-.timeline-marker span { min-width: 25px; height: 20px; display: grid; place-items: center; padding: 0 4px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--panel); color: var(--muted); font: 600 8px var(--font-geist-mono), monospace; }
+.timeline-marker span { min-width: 38px; height: 20px; display: grid; place-items: center; padding: 0 4px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--panel); color: var(--muted); font: 600 7px var(--font-geist-mono), monospace; }
 .timeline-content { min-width: 0; }
 .timeline-content > div { display: flex; align-items: center; gap: 7px; }
 .timeline-content strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }

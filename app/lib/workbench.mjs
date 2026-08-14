@@ -1,5 +1,48 @@
 export const MAX_STORE_SESSIONS = 6;
 
+export async function buildStoreSignature(files, scannerVersion = "4") {
+  const canonical = [...files].map(({ relativePath, file }) => `${String(relativePath).replaceAll("\\", "/")}:${file.size}:${file.lastModified}`).sort().join("\n");
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${scannerVersion}\n${canonical}`));
+  const hex = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${scannerVersion}:inventory-sha256:${hex}`;
+}
+
+export class SignatureReservationRegistry {
+  #entries = new Map();
+  #next = 0;
+  reserve(signature) {
+    const current = this.#entries.get(signature);
+    if (current) return { accepted: false, token: current };
+    const token = `${signature}:${++this.#next}`;
+    this.#entries.set(signature, token);
+    return { accepted: true, token };
+  }
+  isCurrent(signature, token) { return this.#entries.get(signature) === token; }
+  release(signature, token) { if (this.isCurrent(signature, token)) this.#entries.delete(signature); }
+  get size() { return this.#entries.size; }
+}
+
+export class SessionResourceLedger {
+  #entries = new Map();
+  add(sessionId, resource) {
+    if (!this.#entries.has(sessionId)) this.#entries.set(sessionId, []);
+    this.#entries.get(sessionId).push(resource);
+  }
+  cleanup(sessionId) {
+    const resources = this.#entries.get(sessionId) ?? [];
+    this.#entries.delete(sessionId);
+    for (const resource of resources.reverse()) {
+      if (resource.kind === "worker") { resource.value.onmessage = null; resource.value.onerror = null; resource.value.terminate(); }
+      else if (resource.kind === "controller") resource.value.abort();
+      else if (resource.kind === "listener") resource.remove();
+      else if (resource.kind === "timer") resource.clear(resource.value);
+      else if (resource.kind === "object-url") resource.revoke(resource.value);
+    }
+  }
+  cleanupAll() { for (const id of [...this.#entries.keys()]) this.cleanup(id); }
+  count(sessionId) { return (this.#entries.get(sessionId) ?? []).length; }
+}
+
 export function sessionId(signature) {
   let hash = 2166136261;
   for (let index = 0; index < signature.length; index += 1) {
@@ -34,44 +77,56 @@ export function restoreSessions(state) {
     progress: null,
     error: "",
     restored: true,
+    sourceAccess: "cached-only",
   }));
+}
+
+export function getSessionCapabilities(session) {
+  const sourceGranted = session?.sourceAccess === "granted";
+  return { cachedAnalysis: Boolean(session?.result), compare: Boolean(session?.result), incidentCase: Boolean(session?.result), exportDerivedEvidence: Boolean(session?.result), rescanSource: sourceGranted, verifySourceIntegrity: sourceGranted };
 }
 
 function increment(map, key, amount = 1) {
   map.set(key, (map.get(key) ?? 0) + amount);
 }
 
+export const DIFF_IDENTITY_RULES = Object.freeze({
+  destination: "destination-type-and-qualified-name",
+  subscription: "subscription-key-or-raw-consumer-id",
+  message: "message-id",
+  transaction: "transaction-id",
+});
+
 export function collectSnapshotFacts(result) {
-  const facts = new Map();
+  const entities = new Map();
+  const rawOccurrences = new Map();
   for (const item of result?.destinations ?? []) {
-    facts.set(`destination\u0000${item.type}:${item.name}`, item.occurrences ?? 1);
+    const key = `destination\u0000${item.type}:${item.name}`;
+    increment(entities, key, item.occurrences ?? 1); increment(rawOccurrences, "destination", item.occurrences ?? 1);
   }
   for (const item of result?.subscriptions ?? []) {
-    facts.set(`subscription\u0000${item.rawId}`, item.occurrences ?? 1);
+    const key = `subscription\u0000${item.rawId}`;
+    increment(entities, key, item.occurrences ?? 1); increment(rawOccurrences, "subscription", item.occurrences ?? 1);
   }
   for (const record of result?.structured?.records ?? []) {
-    const destination = record.destination?.name ?? "Unknown";
-    increment(facts, `command\u0000${record.command}:${destination}`);
+    const observations = [["message", record.messageId], ["subscription", record.subscriptionKey], ["transaction", record.transactionId]];
+    for (const [category, semanticId] of observations) if (semanticId) { increment(entities, `${category}\u0000${semanticId}`); increment(rawOccurrences, category); }
   }
-  for (const item of result?.files ?? []) {
-    facts.set(`journal-bytes\u0000${item.path}`, item.size ?? 0);
-  }
-  for (const [kind, value] of Object.entries(result?.correlation?.counts ?? {})) {
-    facts.set(`correlation\u0000${kind}`, Number(value) || 0);
-  }
-  return facts;
+  const uniqueCounts = new Map();
+  for (const compound of entities.keys()) increment(uniqueCounts, compound.split("\u0000")[0]);
+  return { entities, rawOccurrences, uniqueCounts };
 }
 
 export function buildSnapshotDiff(left, right) {
   const a = collectSnapshotFacts(left);
   const b = collectSnapshotFacts(right);
-  const keys = [...new Set([...a.keys(), ...b.keys()])].sort((x, y) => x.localeCompare(y));
-  return keys.flatMap((compound) => {
+  const keys = [...new Set([...a.entities.keys(), ...b.entities.keys()])].sort((x, y) => x.localeCompare(y));
+  const entityRows = keys.flatMap((compound) => {
     const [category, key] = compound.split("\u0000");
-    const leftObserved = a.has(compound);
-    const rightObserved = b.has(compound);
-    const leftValue = a.get(compound) ?? null;
-    const rightValue = b.get(compound) ?? null;
+    const leftObserved = a.entities.has(compound);
+    const rightObserved = b.entities.has(compound);
+    const leftValue = a.entities.get(compound) ?? null;
+    const rightValue = b.entities.get(compound) ?? null;
     if (leftObserved && rightObserved && leftValue === rightValue) return [];
     return [{
       id: `${category}:${key}`,
@@ -81,8 +136,18 @@ export function buildSnapshotDiff(left, right) {
       rightValue,
       delta: typeof leftValue === "number" && typeof rightValue === "number" ? rightValue - leftValue : null,
       status: !leftObserved ? "not-observed-left" : !rightObserved ? "not-observed-right" : "changed",
+      identityRule: DIFF_IDENTITY_RULES[category],
+      metric: "semantic-entity-occurrences",
     }];
   });
+  const summaryRows = [];
+  for (const category of Object.keys(DIFF_IDENTITY_RULES)) {
+    for (const [metric, leftMap, rightMap] of [["raw-occurrences", a.rawOccurrences, b.rawOccurrences], ["unique-entities", a.uniqueCounts, b.uniqueCounts]]) {
+      const leftValue = leftMap.get(category) ?? 0; const rightValue = rightMap.get(category) ?? 0;
+      if (leftValue !== rightValue) summaryRows.push({ id: `summary:${category}:${metric}`, category: "summary", key: `${category}:${metric}`, leftValue, rightValue, delta: rightValue - leftValue, status: "changed", identityRule: DIFF_IDENTITY_RULES[category], metric });
+    }
+  }
+  return [...entityRows, ...summaryRows];
 }
 
 export const LEAD_THRESHOLDS = Object.freeze({ advisoryObservations: 10, unknownRecords: 5, journalConcentrationPercent: 60, journalConcentrationMinimum: 10 });
@@ -92,7 +157,7 @@ export function createIncidentCase(now = new Date().toISOString(), id = `case-${
 }
 
 export function addCasePin(incident, pin, now = new Date().toISOString()) {
-  if (incident.pins.some((item) => item.id === pin.id && item.storeSignature === pin.storeSignature)) return incident;
+  if (incident.pins.some((item) => item.semanticKey === pin.semanticKey && item.storeSignature === pin.storeSignature && item.provenance?.file === pin.provenance?.file && item.provenance?.offset === pin.provenance?.offset)) return incident;
   return { ...incident, pins: [...incident.pins, { ...pin, pinnedAt: now }], updatedAt: now };
 }
 
@@ -105,16 +170,16 @@ export function addCaseNote(incident, text, now = new Date().toISOString(), id =
 export function buildInvestigativeLeads(result, thresholds = LEAD_THRESHOLDS) {
   const leads = [];
   const advisory = Number(result?.totals?.advisoryRecords) || 0;
-  if (advisory >= thresholds.advisoryObservations) leads.push({ code: "advisory-volume", observed: advisory, threshold: thresholds.advisoryObservations });
+  if (advisory >= thresholds.advisoryObservations) leads.push({ code: "advisory-volume", whyCode: "advisory-volume", notProveCode: "advisory-volume", observed: advisory, threshold: thresholds.advisoryObservations });
   const unknown = (result?.structured?.records ?? []).filter((record) => record.status === "Unknown" || record.status === "Partial" || record.status === "Unsupported").length;
-  if (unknown >= thresholds.unknownRecords) leads.push({ code: "unresolved-records", observed: unknown, threshold: thresholds.unknownRecords });
+  if (unknown >= thresholds.unknownRecords) leads.push({ code: "unresolved-records", whyCode: "unresolved-records", notProveCode: "unresolved-records", observed: unknown, threshold: thresholds.unknownRecords });
   const journalCounts = new Map();
   for (const record of result?.structured?.records ?? []) increment(journalCounts, record.file);
   const total = [...journalCounts.values()].reduce((sum, count) => sum + count, 0);
   const top = [...journalCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
   const percent = top && total ? Math.round((top[1] / total) * 100) : 0;
   if (top && total >= thresholds.journalConcentrationMinimum && percent >= thresholds.journalConcentrationPercent) {
-    leads.push({ code: "journal-concentration", observed: percent, threshold: thresholds.journalConcentrationPercent, detail: top[0] });
+    leads.push({ code: "journal-concentration", whyCode: "journal-concentration", notProveCode: "journal-concentration", observed: percent, threshold: thresholds.journalConcentrationPercent, detail: top[0] });
   }
   return leads;
 }
@@ -139,7 +204,6 @@ export function buildJournalRetentionIndex(result) {
     }
   }
   const journals = (result?.files ?? []).filter((file) => file.kind === "journal" || /db-\d+\.log$/i.test(file.path));
-  const maxId = Math.max(-1, ...journals.map((file) => journalFileId(file.path) ?? -1));
   return journals.map((file) => {
     const records = [...(recordsByFile.get(file.path) ?? recordsByFile.get(file.name) ?? [])].sort((a, b) => a.location.offset - b.location.offset);
     const refs = [...(refsByFile.get(file.path)?.values() ?? refsByFile.get(file.name)?.values() ?? [])].sort((a, b) => (a.offset ?? -1) - (b.offset ?? -1) || a.id.localeCompare(b.id));
@@ -159,7 +223,7 @@ export function buildJournalRetentionIndex(result) {
       destinations,
       commands,
       references: refs,
-      sequence: fileId !== null && fileId < maxId ? "older-file-id" : fileId === maxId ? "highest-file-id" : "unknown-order",
+      sequence: fileId === null ? "unknown-order" : "filename-derived-id",
       observation: refs.length ? "references-observed" : records.length ? "records-observed" : "no-structured-observation",
     };
   }).sort((a, b) => (a.fileId ?? Number.MAX_SAFE_INTEGER) - (b.fileId ?? Number.MAX_SAFE_INTEGER) || a.path.localeCompare(b.path));
@@ -169,7 +233,7 @@ export const MAX_TIMELINE_EVENTS = 10_000;
 
 export function buildEvidenceTimeline(result, limit = MAX_TIMELINE_EVENTS) {
   const records = (result?.structured?.records ?? []).map((record, index) => ({
-    id: `${record.location?.dataFileId ?? journalFileId(record.file) ?? -1}:${record.location?.offset ?? -1}:${index}`,
+    id: `${record.file}:${record.location?.offset ?? -1}:${index}`,
     file: record.file,
     dataFileId: record.location?.dataFileId ?? journalFileId(record.file),
     offset: record.location?.offset ?? null,
@@ -179,11 +243,29 @@ export function buildEvidenceTimeline(result, limit = MAX_TIMELINE_EVENTS) {
     primaryId: record.messageId ?? record.subscriptionKey ?? record.transactionId ?? "Unknown",
     status: record.status ?? "Unknown",
     confidence: record.confidence ?? "Unknown",
-  })).sort((a, b) => (a.dataFileId ?? Number.MAX_SAFE_INTEGER) - (b.dataFileId ?? Number.MAX_SAFE_INTEGER)
-    || (a.offset ?? Number.MAX_SAFE_INTEGER) - (b.offset ?? Number.MAX_SAFE_INTEGER)
-    || a.command.localeCompare(b.command)
-    || a.id.localeCompare(b.id));
-  return { events: records.slice(0, Math.max(0, limit)), total: records.length, truncated: records.length > limit, ordering: "data-file-id-offset" };
+  }));
+  const groups = new Map();
+  for (const record of records) { if (!groups.has(record.file)) groups.set(record.file, []); groups.get(record.file).push(record); }
+  const events = [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).flatMap(([, items]) => items.sort((a, b) => (a.offset ?? Number.MAX_SAFE_INTEGER) - (b.offset ?? Number.MAX_SAFE_INTEGER) || a.command.localeCompare(b.command) || a.id.localeCompare(b.id)));
+  return { events: events.slice(0, Math.max(0, limit)), total: events.length, truncated: events.length > limit, ordering: "per-journal-offset" };
+}
+
+export function semanticEvidenceKeys(result) {
+  const keys = new Set();
+  for (const item of result?.destinations ?? []) keys.add(`destination:${item.type}:${item.name}`);
+  for (const item of result?.subscriptions ?? []) keys.add(`subscription:${item.rawId}`);
+  for (const item of result?.messages ?? []) keys.add(`message:${item.relatedId !== "Unknown" ? item.relatedId : `${item.destination}:${item.detectedType}:${item.operation}`}`);
+  for (const item of result?.correlation?.links ?? []) keys.add(`correlation:${item.kind}:${item.primaryId}`);
+  for (const item of result?.structured?.records ?? []) keys.add(item.messageId ? `message:${item.messageId}` : item.subscriptionKey ? `subscription:${item.subscriptionKey}` : item.transactionId ? `transaction:${item.transactionId}` : `record:${item.command}:${item.destination?.name ?? "Unknown"}`);
+  for (const item of result?.strings ?? []) keys.add(`raw-string:${item.value}`);
+  for (const item of result?.files ?? []) keys.add(`source-file:${item.path}`);
+  return keys;
+}
+
+export function resolveCasePin(pin, results) {
+  const store = results.find((result) => result.signature === pin.storeSignature);
+  if (!store) return { status: "unresolved", reason: "store-not-open" };
+  return semanticEvidenceKeys(store).has(pin.semanticKey) ? { status: "resolved", reason: "semantic-key-observed" } : { status: "unresolved", reason: "semantic-key-not-observed" };
 }
 
 const encoder = new TextEncoder();

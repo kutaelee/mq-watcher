@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addCaseNote, addCasePin, buildEvidenceTimeline, buildInvestigativeLeads, buildJournalRetentionIndex, buildSnapshotDiff, closeSession, createIncidentCase, findReusableSession, MAX_STORE_SESSIONS, restoreSessions, sessionId } from "../app/lib/workbench.mjs";
+import { addCaseNote, addCasePin, buildEvidenceTimeline, buildInvestigativeLeads, buildJournalRetentionIndex, buildSnapshotDiff, buildStoreSignature, closeSession, createIncidentCase, findReusableSession, getSessionCapabilities, MAX_STORE_SESSIONS, resolveCasePin, restoreSessions, sessionId, SessionResourceLedger, SignatureReservationRegistry } from "../app/lib/workbench.mjs";
+import { applyDatabaseUpgrade, CACHE_SCHEMA_VERSION, enqueueScanCacheWrite, planDatabaseMigration } from "../app/lib/scan-cache.ts";
 import { buildEvidenceBundle } from "../public/workbench-export.js";
 
 function readStoredZip(bytes) {
@@ -27,6 +28,116 @@ test("session IDs and duplicate lookup are deterministic", () => {
   assert.equal(findReusableSession([existing], "same"), existing);
 });
 
+test("store identity excludes directory display name and uses canonical inventory SHA-256", async () => {
+  const files = [{ relativePath: "db-1.log", file: { size: 10, lastModified: 7 } }, { relativePath: "lock", file: { size: 0, lastModified: 1 } }];
+  const first = await buildStoreSignature(files, "4");
+  const renamedDirectorySameInventory = await buildStoreSignature([...files].reverse(), "4");
+  const changed = await buildStoreSignature([{ relativePath: "db-1.log", file: { size: 11, lastModified: 7 } }], "4");
+  assert.equal(first, renamedDirectorySameInventory);
+  assert.notEqual(first, changed);
+  assert.match(first, /^4:inventory-sha256:[a-f0-9]{64}$/);
+});
+
+test("signature reservation rejects duplicate-open races and stale generations", () => {
+  const registry = new SignatureReservationRegistry();
+  const first = registry.reserve("sig");
+  const raced = registry.reserve("sig");
+  assert.equal(first.accepted, true);
+  assert.deepEqual(raced, { accepted: false, token: first.token });
+  registry.release("sig", first.token);
+  const reopened = registry.reserve("sig");
+  assert.equal(reopened.accepted, true);
+  assert.equal(registry.isCurrent("sig", first.token), false);
+  assert.equal(registry.isCurrent("sig", reopened.token), true);
+});
+
+test("a closed scan generation cannot apply a delayed completion or cache write", async () => {
+  const registry = new SignatureReservationRegistry();
+  const first = registry.reserve("sig");
+  let releaseBarrier;
+  const barrier = new Promise((resolve) => { releaseBarrier = resolve; });
+  const effects = [];
+  const delayed = (async () => { await barrier; if (registry.isCurrent("sig", first.token)) effects.push("state", "cache"); })();
+  registry.release("sig", first.token);
+  const reopened = registry.reserve("sig");
+  releaseBarrier();
+  await delayed;
+  assert.deepEqual(effects, []);
+  assert.equal(registry.isCurrent("sig", reopened.token), true);
+});
+
+test("cache writes are serialized per signature and the newest generation wins", async () => {
+  let currentGeneration = "old";
+  let releaseOld;
+  let markOldStarted;
+  const oldBarrier = new Promise((resolve) => { releaseOld = resolve; });
+  const oldStarted = new Promise((resolve) => { markOldStarted = resolve; });
+  const persisted = [];
+  const oldWrite = enqueueScanCacheWrite("sig", "old", (_signature, generation) => generation === currentGeneration, async () => {
+    markOldStarted();
+    await oldBarrier;
+    persisted.push("old");
+  });
+  await oldStarted;
+  currentGeneration = "new";
+  const newWrite = enqueueScanCacheWrite("sig", "new", (_signature, generation) => generation === currentGeneration, async () => { persisted.push("new"); });
+  releaseOld();
+  assert.equal(await oldWrite, true);
+  assert.equal(await newWrite, true);
+  assert.deepEqual(persisted, ["old", "new"]);
+
+  const staleWrite = await enqueueScanCacheWrite("sig", "stale", (_signature, generation) => generation === currentGeneration, async () => { persisted.push("stale"); });
+  assert.equal(staleWrite, false);
+  assert.deepEqual(persisted, ["old", "new"]);
+});
+
+test("IndexedDB v0.2 cache is invalidated for v0.3 while incident cases are preserved", () => {
+  const names = new Set(["scan-results", "workbench-state", "incident-cases"]);
+  const operations = [];
+  const database = {
+    objectStoreNames: { [Symbol.iterator]: () => names[Symbol.iterator]() },
+    createObjectStore(name) { names.add(name); operations.push(`create:${name}`); return {}; },
+  };
+  const transaction = {
+    objectStore(name) {
+      return {
+        clear() { operations.push(`clear:${name}`); },
+        put(value) { operations.push(`put:${name}:${value.version}`); },
+      };
+    },
+  };
+  assert.deepEqual(planDatabaseMigration(1), {
+    from: 1,
+    to: CACHE_SCHEMA_VERSION,
+    invalidateScanResults: true,
+    invalidateWorkbenchState: true,
+    preserveIncidentCases: true,
+  });
+  applyDatabaseUpgrade(database, transaction, 1);
+  assert.deepEqual(operations, [
+    "create:schema-meta",
+    "clear:scan-results",
+    "clear:workbench-state",
+    `put:schema-meta:${CACHE_SCHEMA_VERSION}`,
+  ]);
+  assert.ok(!operations.includes("clear:incident-cases"));
+});
+
+test("session resource cleanup releases every registered resource exactly once", () => {
+  const calls = [];
+  const worker = { onmessage: () => {}, onerror: () => {}, terminate: () => calls.push("worker") };
+  const controller = { abort: () => calls.push("controller") };
+  const ledger = new SessionResourceLedger();
+  ledger.add("s", { kind: "worker", value: worker });
+  ledger.add("s", { kind: "controller", value: controller });
+  ledger.add("s", { kind: "listener", remove: () => calls.push("listener") });
+  ledger.add("s", { kind: "timer", value: 1, clear: () => calls.push("timer") });
+  ledger.add("s", { kind: "object-url", value: "blob:x", revoke: () => calls.push("url") });
+  ledger.cleanup("s"); ledger.cleanup("s");
+  assert.deepEqual(calls.sort(), ["controller", "listener", "timer", "url", "worker"]);
+  assert.equal(worker.onmessage, null); assert.equal(worker.onerror, null); assert.equal(ledger.count("s"), 0);
+});
+
 test("closing the active tab selects the nearest remaining tab", () => {
   const sessions = [{ id: "a" }, { id: "b" }, { id: "c" }];
   assert.deepEqual(closeSession(sessions, "b", "b"), {
@@ -44,6 +155,17 @@ test("restoration is bounded and marks cached sessions", () => {
   const restored = restoreSessions({ sessions });
   assert.equal(restored.length, MAX_STORE_SESSIONS);
   assert.ok(restored.every((session) => session.restored && session.status === "ready"));
+  assert.ok(restored.every((session) => session.sourceAccess === "cached-only"));
+});
+
+test("cached analysis remains usable when source permission is unavailable", () => {
+  const capabilities = getSessionCapabilities({ result: { signature: "sig" }, sourceAccess: "cached-only" });
+  assert.equal(capabilities.cachedAnalysis, true);
+  assert.equal(capabilities.compare, true);
+  assert.equal(capabilities.incidentCase, true);
+  assert.equal(capabilities.exportDerivedEvidence, true);
+  assert.equal(capabilities.rescanSource, false);
+  assert.equal(capabilities.verifySourceIntegrity, false);
 });
 
 test("snapshot diff is deterministic and reports observations without runtime-state claims", () => {
@@ -57,21 +179,39 @@ test("snapshot diff is deterministic and reports observations without runtime-st
   const later = structuredClone(base);
   later.destinations[0].occurrences = 3;
   later.destinations.push({ type: "Topic", name: "PRICES", occurrences: 1 });
-  later.files[0].size = 140;
+  later.structured.records.push({ command: "KahaAddMessageCommand", destination: { name: "ORDERS" }, messageId: "ID:2" });
   const first = buildSnapshotDiff(base, later);
   assert.deepEqual(first, buildSnapshotDiff(base, later));
   assert.ok(first.some((row) => row.status === "not-observed-left" && row.key.includes("PRICES")));
-  assert.ok(first.some((row) => row.status === "changed" && row.delta === 40));
+  assert.ok(first.some((row) => row.category === "summary" && row.key === "destination:raw-occurrences" && row.delta === 2));
   assert.ok(first.every((row) => !row.status.includes("removed")));
+});
+
+test("snapshot identity ignores provenance and separates raw from unique semantic counts", () => {
+  const left = { destinations: [], subscriptions: [], structured: { records: [{ file: "db-1.log", location: { offset: 1 }, messageId: "ID:1" }, { file: "db-2.log", location: { offset: 999 }, messageId: "ID:1" }] } };
+  const right = { destinations: [], subscriptions: [], structured: { records: [{ file: "other.log", location: { offset: 44 }, messageId: "ID:1" }] } };
+  const rows = buildSnapshotDiff(left, right);
+  assert.ok(rows.some((row) => row.category === "message" && row.key === "ID:1" && row.leftValue === 2 && row.rightValue === 1));
+  assert.ok(rows.some((row) => row.key === "message:raw-occurrences" && row.leftValue === 2 && row.rightValue === 1));
+  assert.ok(!rows.some((row) => row.key === "message:unique-entities"));
+  assert.ok(rows.every((row) => !row.id.includes("db-") && !row.id.includes("offset")));
 });
 
 test("incident cases keep explicit user notes and de-duplicate pinned evidence", () => {
   const created = createIncidentCase("2026-01-01T00:00:00.000Z", "case-1");
   const noted = addCaseNote(created, "Check the reconnect sequence", "2026-01-01T00:01:00.000Z", "note-1");
-  const pin = { id: "evidence-1", storeSignature: "sig", storeName: "store-a", kind: "message", label: "ORDERS", file: "db-1.log", offset: 12, confidence: "Parsed" };
+  const pin = { id: "evidence-1", semanticKey: "message:ID:1", storeSignature: "sig", storeName: "store-a", kind: "message", label: "ORDERS", provenance: { file: "db-1.log", offset: 12 }, confidence: "Parsed" };
   const pinned = addCasePin(noted, pin, "2026-01-01T00:02:00.000Z");
   assert.equal(pinned.notes[0].text, "Check the reconnect sequence");
   assert.equal(addCasePin(pinned, pin).pins.length, 1);
+});
+
+test("case references resolve by store signature and semantic key, not session ID", () => {
+  const pin = { storeSignature: "sig", semanticKey: "message:ID:1" };
+  const result = { signature: "sig", structured: { records: [{ messageId: "ID:1" }] }, destinations: [], subscriptions: [], messages: [], correlation: { links: [] }, strings: [], files: [] };
+  assert.deepEqual(resolveCasePin(pin, [result]), { status: "resolved", reason: "semantic-key-observed" });
+  assert.deepEqual(resolveCasePin(pin, []), { status: "unresolved", reason: "store-not-open" });
+  assert.deepEqual(resolveCasePin({ ...pin, semanticKey: "message:ID:missing" }, [result]), { status: "unresolved", reason: "semantic-key-not-observed" });
 });
 
 test("investigative leads expose their thresholds without declaring a root cause", () => {
@@ -93,7 +233,7 @@ test("journal reverse index preserves file order and observed references", () =>
   const rows = buildJournalRetentionIndex(result);
   assert.deepEqual(rows.map((row) => row.fileId), [1, 2]);
   assert.equal(rows[0].referenceCount, 1);
-  assert.equal(rows[0].sequence, "older-file-id");
+  assert.equal(rows[0].sequence, "filename-derived-id");
   assert.equal(rows[1].observation, "no-structured-observation");
 });
 
@@ -106,6 +246,7 @@ test("evidence timeline uses deterministic file and offset order without timesta
   const timeline = buildEvidenceTimeline(result, 2);
   assert.deepEqual(timeline.events.map((event) => event.command), ["First", "Later"]);
   assert.equal(timeline.truncated, true);
+  assert.equal(timeline.ordering, "per-journal-offset");
   assert.ok(timeline.events.every((event) => !("timestamp" in event) && !("time" in event)));
 });
 

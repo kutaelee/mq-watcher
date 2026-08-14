@@ -4,7 +4,7 @@ import { ArrowRight, GitCompareArrows, Info } from "lucide-react";
 import { useState } from "react";
 import { useI18n } from "@/app/lib/i18n";
 import type { ScanResult } from "@/app/lib/types";
-import { buildSnapshotDiff, type SnapshotDiffRow } from "@/app/lib/workbench.mjs";
+import { buildSnapshotDiff, DIFF_IDENTITY_RULES, type SnapshotDiffRow } from "@/app/lib/workbench.mjs";
 import { Badge, Card } from "../ui";
 
 type SessionOption = { id: string; name: string; result: ScanResult | null };
@@ -24,7 +24,7 @@ export function SnapshotCompare({ sessions }: { sessions: SessionOption[] }) {
   const left = ready.find((item) => item.id === effectiveLeftId);
   const right = ready.find((item) => item.id === effectiveRightId);
   const rows = left && right ? buildSnapshotDiff(left.result, right.result) : [];
-  const counts = rows.reduce((summary, row) => ({ ...summary, [row.status]: (summary[row.status] ?? 0) + 1 }), {} as Record<string, number>);
+  const counts = rows.filter((row) => row.category !== "summary").reduce((summary, row) => ({ ...summary, [row.status]: (summary[row.status] ?? 0) + 1 }), {} as Record<string, number>);
 
   if (ready.length < 2) return <Card className="compare-empty"><GitCompareArrows size={28} /><h2>{t("compare.needTwo.title")}</h2><p>{t("compare.needTwo.body")}</p></Card>;
   return <div className="view-stack">
@@ -39,6 +39,7 @@ export function SnapshotCompare({ sessions }: { sessions: SessionOption[] }) {
       <Card><strong>{counts["not-observed-right"] ?? 0}</strong><span>{t("compare.onlyA")}</span></Card>
     </div>
     <div className="best-effort"><Info size={15} /><span>{t("compare.limit")}</span></div>
+    <Card className="identity-rules"><strong>{t("compare.identityRules")}</strong><p>{t("compare.identityProvenance")}</p><div>{Object.entries(DIFF_IDENTITY_RULES).map(([entity, rule]) => <code key={entity}>{t(`compare.entity.${entity}`)} = {rule}</code>)}</div></Card>
     <Card className="table-card"><div className="table-scroll"><table><thead><tr><th>{t("compare.category")}</th><th>{t("compare.observation")}</th><th>{t("compare.snapshotA")}</th><th>{t("compare.snapshotB")}</th><th>{t("compare.result")}</th></tr></thead><tbody>{rows.map((row: SnapshotDiffRow) => <tr key={row.id}><td><Badge tone="blue">{t(`compare.category.${row.category}`)}</Badge></td><td className="mono-cell">{row.key}</td><td>{valueLabel(row.leftValue)}</td><td>{valueLabel(row.rightValue)}</td><td><Badge tone={row.status === "changed" ? "amber" : "neutral"}>{t(`compare.status.${row.status}`)}</Badge>{row.delta !== null ? <small className="diff-delta">{row.delta > 0 ? "+" : ""}{row.delta.toLocaleString()}</small> : null}</td></tr>)}</tbody></table>{!rows.length ? <p className="compare-no-diff">{t("compare.noDiff")}</p> : null}</div></Card>
   </div>;
 }

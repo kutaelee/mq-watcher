@@ -199,12 +199,12 @@ export type FileInput = {
 
 export type CasePin = {
   id: string;
+  semanticKey: string;
   storeSignature: string;
   storeName: string;
   kind: string;
   label: string;
-  file: string;
-  offset: number | null;
+  provenance: { file: string; offset: number | null };
   confidence: Confidence;
   pinnedAt: string;
 };
