@@ -108,6 +108,45 @@ export type StructuredJournalResult = {
   truncated: boolean;
 };
 
+export type EvidenceRef = {
+  id: string;
+  kind: "source-file" | "parsed-record" | "raw-string" | "message-candidate" | "subscription-candidate";
+  file: string;
+  offset: number | null;
+  recordId?: string;
+  rawId?: string;
+  messageId?: string;
+  subscriptionId?: string;
+  label: string;
+  confidence: Confidence;
+};
+
+export type EvidenceLink = {
+  id: string;
+  kind: "message" | "subscription" | "transaction" | "advisory";
+  primaryId: string;
+  destination: string;
+  destinationType: string;
+  journal: string;
+  offset: number | null;
+  ackStatus: "Observed" | "Not observed" | "Unknown";
+  interpretation: string;
+  transactionId: string;
+  confidence: Confidence;
+  evidenceRefs: EvidenceRef[];
+};
+
+export type EvidenceCorrelationResult = {
+  links: EvidenceLink[];
+  counts: {
+    messages: number;
+    subscriptions: number;
+    transactions: number;
+    advisories: number;
+  };
+  warnings: string[];
+};
+
 export type ScanResult = {
   signature: string;
   directoryName: string;
@@ -118,6 +157,7 @@ export type ScanResult = {
   subscriptions: SubscriptionRecord[];
   messages: MessageCandidate[];
   structured: StructuredJournalResult;
+  correlation: EvidenceCorrelationResult;
   strings: StringHit[];
   totals: {
     bytes: number;

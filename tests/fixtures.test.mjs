@@ -93,12 +93,48 @@ test("structured parser decodes official KahaDB batch and command envelopes", as
   assert.equal(scan.result.structured.journals[0].batches[0].checksum, "Valid");
   assert.deepEqual(
     scan.result.structured.records.map((record) => record.command),
-    ["KAHA_ADD_MESSAGE_COMMAND", "KAHA_SUBSCRIPTION_COMMAND", "KAHA_COMMIT_COMMAND"],
+    [
+      "KAHA_ADD_MESSAGE_COMMAND",
+      "KAHA_SUBSCRIPTION_COMMAND",
+      "KAHA_COMMIT_COMMAND",
+      "KAHA_REMOVE_MESSAGE_COMMAND",
+      "KAHA_ADD_MESSAGE_COMMAND",
+    ],
   );
   assert.deepEqual(scan.result.structured.records[0].destination, { type: "Queue", name: "ORDERS" });
   assert.equal(scan.result.structured.records[0].messageId, "ID:MESSAGE:1");
   assert.equal(scan.result.structured.records[0].transactionId, "local:ID:CLIENT:1:42");
   assert.equal(scan.result.structured.records[1].subscriptionKey, "client-a:prices");
+});
+
+test("correlation links queue messages, durable subscriptions, ACKs, transactions, and advisories to evidence", async () => {
+  const scan = await scanPath(path.join(fixtureRoot, "kahadb-framing"));
+  const links = scan.result.correlation.links;
+  const queueMessage = links.find((link) => link.kind === "message" && link.primaryId === "ID:MESSAGE:1");
+  assert.equal(queueMessage?.destination, "ORDERS");
+  assert.equal(queueMessage?.ackStatus, "Observed");
+  assert.ok(queueMessage?.evidenceRefs.some((ref) => ref.kind === "parsed-record"));
+
+  const subscriptionLink = links.find((link) => link.kind === "subscription" && link.primaryId === "client-a:prices");
+  assert.equal(subscriptionLink?.destination, "PRICES");
+  assert.equal(subscriptionLink?.confidence, "Parsed");
+
+  const transactionLink = links.find((link) => link.kind === "transaction" && link.primaryId === "local:ID:CLIENT:1:42");
+  assert.match(transactionLink?.interpretation || "", /Commit command observed/);
+  assert.ok((transactionLink?.evidenceRefs.length || 0) >= 2);
+
+  const advisoryLink = links.find((link) => link.kind === "advisory" && link.primaryId === "ID:ADVISORY:1");
+  assert.equal(advisoryLink?.destination, "ActiveMQ.Advisory.TempQueue");
+  assert.equal(advisoryLink?.confidence, "Parsed");
+});
+
+test("missing ACK correlation states the evidence limit instead of asserting non-acknowledgement", async () => {
+  const scan = await scanPath(path.join(fixtureRoot, "kahadb-framing"));
+  const advisoryMessage = scan.result.correlation.links.find(
+    (link) => link.kind === "message" && link.primaryId === "ID:ADVISORY:1",
+  );
+  assert.equal(advisoryMessage?.ackStatus, "Not observed");
+  assert.match(advisoryMessage?.interpretation || "", /does not prove that the message was never acknowledged/i);
 });
 
 test("structured parser reports malformed and corrupt records without inventing values", async () => {

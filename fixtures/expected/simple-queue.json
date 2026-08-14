@@ -34,6 +34,19 @@
     "warnings": [],
     "truncated": false
   },
+  "correlation": {
+    "links": [],
+    "counts": {
+      "messages": 0,
+      "subscriptions": 0,
+      "transactions": 0,
+      "advisories": 0
+    },
+    "warnings": [
+      "Correlations describe relationships found in the scanned evidence; they do not identify an outage cause.",
+      "A record not found in the scanned evidence is not proof that the event never occurred."
+    ]
+  },
   "totals": {
     "bytes": 82,
     "journalFiles": 1,

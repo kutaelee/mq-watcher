@@ -3,16 +3,42 @@
   "files": [
     {
       "path": "db-1.log",
-      "size": 151,
+      "size": 243,
       "kind": "journal",
       "confidence": "Observed"
     }
   ],
-  "destinations": [],
+  "destinations": [
+    {
+      "type": "Topic",
+      "name": "ActiveMQ.Advisory.TempQueue",
+      "source": "db-1.log",
+      "occurrences": 1,
+      "confidence": "Observed"
+    }
+  ],
   "subscriptions": [],
-  "messageCandidates": [],
-  "messageIds": [],
-  "offsets": [],
+  "messageCandidates": [
+    {
+      "id": "db-1.log:192:advisory",
+      "journal": "db-1.log",
+      "offset": 192,
+      "destination": "ActiveMQ.Advisory.TempQueue",
+      "detectedType": "Unknown",
+      "relatedId": "ID:ADVISORY:1",
+      "operation": "Unknown",
+      "confidence": "Observed"
+    }
+  ],
+  "messageIds": [
+    "ID:ADVISORY:1"
+  ],
+  "offsets": [
+    {
+      "id": "db-1.log:192:advisory",
+      "offset": 192
+    }
+  ],
   "structured": {
     "status": "Parsed",
     "confidence": "Parsed",
@@ -61,16 +87,588 @@
         "status": "Parsed",
         "confidence": "Parsed",
         "transactionId": "local:ID:CLIENT:1:42"
+      },
+      {
+        "file": "db-1.log",
+        "location": {
+          "dataFileId": 1,
+          "offset": 146,
+          "size": 33
+        },
+        "command": "KAHA_REMOVE_MESSAGE_COMMAND",
+        "status": "Parsed",
+        "confidence": "Parsed",
+        "destination": {
+          "type": "Queue",
+          "name": "ORDERS"
+        },
+        "messageId": "ID:MESSAGE:1"
+      },
+      {
+        "file": "db-1.log",
+        "location": {
+          "dataFileId": 1,
+          "offset": 179,
+          "size": 59
+        },
+        "command": "KAHA_ADD_MESSAGE_COMMAND",
+        "status": "Parsed",
+        "confidence": "Parsed",
+        "destination": {
+          "type": "Topic",
+          "name": "ActiveMQ.Advisory.TempQueue"
+        },
+        "messageId": "ID:ADVISORY:1"
       }
     ],
     "warnings": [],
     "truncated": false
   },
+  "correlation": {
+    "links": [
+      {
+        "id": "message:db-1.log:28",
+        "kind": "message",
+        "primaryId": "ID:MESSAGE:1",
+        "destination": "ORDERS",
+        "journal": "db-1.log",
+        "offset": 28,
+        "ackStatus": "Observed",
+        "transactionId": "local:ID:CLIENT:1:42",
+        "confidence": "Parsed",
+        "evidenceRefs": [
+          {
+            "id": "file:db-1.log",
+            "kind": "source-file",
+            "file": "db-1.log",
+            "offset": null,
+            "confidence": "Observed"
+          },
+          {
+            "id": "parsed:db-1.log:28",
+            "kind": "parsed-record",
+            "file": "db-1.log",
+            "offset": 28,
+            "confidence": "Parsed"
+          },
+          {
+            "id": "parsed:db-1.log:146",
+            "kind": "parsed-record",
+            "file": "db-1.log",
+            "offset": 146,
+            "confidence": "Parsed"
+          },
+          {
+            "id": "raw:db-1.log:5",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 5,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:41",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 41,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:60",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 60,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:68",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 68,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:97",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 97,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:105",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 105,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:133",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 133,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:159",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 159,
+            "confidence": "Observed"
+          }
+        ]
+      },
+      {
+        "id": "message:db-1.log:179",
+        "kind": "message",
+        "primaryId": "ID:ADVISORY:1",
+        "destination": "ActiveMQ.Advisory.TempQueue",
+        "journal": "db-1.log",
+        "offset": 179,
+        "ackStatus": "Not observed",
+        "transactionId": "Unknown",
+        "confidence": "Parsed",
+        "evidenceRefs": [
+          {
+            "id": "file:db-1.log",
+            "kind": "source-file",
+            "file": "db-1.log",
+            "offset": null,
+            "confidence": "Observed"
+          },
+          {
+            "id": "parsed:db-1.log:179",
+            "kind": "parsed-record",
+            "file": "db-1.log",
+            "offset": 179,
+            "confidence": "Parsed"
+          },
+          {
+            "id": "raw:db-1.log:5",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 5,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:41",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 41,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:60",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 60,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:68",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 68,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:97",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 97,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:105",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 105,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:133",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 133,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:159",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 159,
+            "confidence": "Observed"
+          }
+        ]
+      },
+      {
+        "id": "subscription:db-1.log:84",
+        "kind": "subscription",
+        "primaryId": "client-a:prices",
+        "destination": "PRICES",
+        "journal": "db-1.log",
+        "offset": 84,
+        "ackStatus": "Unknown",
+        "transactionId": "Unknown",
+        "confidence": "Parsed",
+        "evidenceRefs": [
+          {
+            "id": "file:db-1.log",
+            "kind": "source-file",
+            "file": "db-1.log",
+            "offset": null,
+            "confidence": "Observed"
+          },
+          {
+            "id": "parsed:db-1.log:84",
+            "kind": "parsed-record",
+            "file": "db-1.log",
+            "offset": 84,
+            "confidence": "Parsed"
+          },
+          {
+            "id": "raw:db-1.log:5",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 5,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:41",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 41,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:60",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 60,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:68",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 68,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:97",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 97,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:105",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 105,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:133",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 133,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:159",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 159,
+            "confidence": "Observed"
+          }
+        ]
+      },
+      {
+        "id": "transaction:local:ID:CLIENT:1:42",
+        "kind": "transaction",
+        "primaryId": "local:ID:CLIENT:1:42",
+        "destination": "ORDERS",
+        "journal": "db-1.log",
+        "offset": 28,
+        "ackStatus": "Unknown",
+        "transactionId": "local:ID:CLIENT:1:42",
+        "confidence": "Parsed",
+        "evidenceRefs": [
+          {
+            "id": "file:db-1.log",
+            "kind": "source-file",
+            "file": "db-1.log",
+            "offset": null,
+            "confidence": "Observed"
+          },
+          {
+            "id": "parsed:db-1.log:28",
+            "kind": "parsed-record",
+            "file": "db-1.log",
+            "offset": 28,
+            "confidence": "Parsed"
+          },
+          {
+            "id": "raw:db-1.log:5",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 5,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:41",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 41,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:60",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 60,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:68",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 68,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:97",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 97,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:105",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 105,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:133",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 133,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:159",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 159,
+            "confidence": "Observed"
+          },
+          {
+            "id": "parsed:db-1.log:120",
+            "kind": "parsed-record",
+            "file": "db-1.log",
+            "offset": 120,
+            "confidence": "Parsed"
+          }
+        ]
+      },
+      {
+        "id": "advisory:db-1.log:179",
+        "kind": "advisory",
+        "primaryId": "ID:ADVISORY:1",
+        "destination": "ActiveMQ.Advisory.TempQueue",
+        "journal": "db-1.log",
+        "offset": 179,
+        "ackStatus": "Not observed",
+        "transactionId": "Unknown",
+        "confidence": "Parsed",
+        "evidenceRefs": [
+          {
+            "id": "file:db-1.log",
+            "kind": "source-file",
+            "file": "db-1.log",
+            "offset": null,
+            "confidence": "Observed"
+          },
+          {
+            "id": "parsed:db-1.log:179",
+            "kind": "parsed-record",
+            "file": "db-1.log",
+            "offset": 179,
+            "confidence": "Parsed"
+          },
+          {
+            "id": "raw:db-1.log:5",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 5,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:41",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 41,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:60",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 60,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:68",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 68,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:97",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 97,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:105",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 105,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:133",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 133,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:159",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 159,
+            "confidence": "Observed"
+          }
+        ]
+      },
+      {
+        "id": "advisory-candidate:db-1.log:192:advisory",
+        "kind": "advisory",
+        "primaryId": "ID:ADVISORY:1",
+        "destination": "ActiveMQ.Advisory.TempQueue",
+        "journal": "db-1.log",
+        "offset": 192,
+        "ackStatus": "Unknown",
+        "transactionId": "Unknown",
+        "confidence": "Observed",
+        "evidenceRefs": [
+          {
+            "id": "file:db-1.log",
+            "kind": "source-file",
+            "file": "db-1.log",
+            "offset": null,
+            "confidence": "Observed"
+          },
+          {
+            "id": "message-candidate:db-1.log:192:advisory",
+            "kind": "message-candidate",
+            "file": "db-1.log",
+            "offset": 192,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:60",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 60,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:68",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 68,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:97",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 97,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:105",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 105,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:133",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 133,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:159",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 159,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:167",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 167,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:192",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 192,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:221",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 221,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:238",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 238,
+            "confidence": "Observed"
+          }
+        ]
+      }
+    ],
+    "counts": {
+      "messages": 2,
+      "subscriptions": 1,
+      "transactions": 1,
+      "advisories": 2
+    },
+    "warnings": [
+      "Correlations describe relationships found in the scanned evidence; they do not identify an outage cause.",
+      "A record not found in the scanned evidence is not proof that the event never occurred."
+    ]
+  },
   "totals": {
-    "bytes": 151,
+    "bytes": 243,
     "journalFiles": 1,
-    "advisoryRecords": 0,
-    "scannedBytes": 151
+    "advisoryRecords": 1,
+    "scannedBytes": 243
   },
   "warnings": [
     "Store 유형을 확정하지 않았습니다. 파일 목록과 Raw 문자열을 직접 확인하세요."

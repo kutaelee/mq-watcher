@@ -49,10 +49,14 @@ import { readScanCache, writeScanCache } from "@/app/lib/scan-cache";
 import type {
   Confidence,
   DestinationRecord,
+  EvidenceLink,
+  EvidenceRef,
   FileInput,
   MessageCandidate,
   ScanFile,
   ScanResult,
+  StringHit,
+  StructuredRecord,
   SubscriptionRecord,
   WorkerMessage,
   WorkerProgress,
@@ -71,12 +75,15 @@ import {
   Tooltip,
 } from "./ui";
 
-type ViewId = "overview" | "destinations" | "subscriptions" | "messages" | "files";
+type ViewId = "overview" | "destinations" | "subscriptions" | "messages" | "evidence" | "files";
 
 type Selected =
   | { type: "destination"; value: DestinationRecord }
   | { type: "subscription"; value: SubscriptionRecord }
   | { type: "message"; value: MessageCandidate }
+  | { type: "correlation"; value: EvidenceLink }
+  | { type: "record"; value: StructuredRecord }
+  | { type: "raw"; value: StringHit }
   | { type: "file"; value: ScanFile }
   | null;
 
@@ -107,12 +114,13 @@ const EMPTY_PROGRESS: WorkerProgress = {
   totalBytes: 0,
 };
 
-const SCANNER_VERSION = "2";
+const SCANNER_VERSION = "3";
 const NAVIGATION: Array<{ id: ViewId; icon: typeof Gauge }> = [
   { id: "overview", icon: Gauge },
   { id: "destinations", icon: Boxes },
   { id: "subscriptions", icon: Network },
   { id: "messages", icon: MessageSquareText },
+  { id: "evidence", icon: ListTree },
   { id: "files", icon: Files },
 ];
 
@@ -142,6 +150,11 @@ function makeHelp(t: Translator): Record<string, ContextHelp> {
       title: t("help.cursor.title"),
       body: t("help.cursor.body"),
       classes: ["FilePendingMessageCursor", "PendingMessageCursor", "PList"],
+    },
+    correlation: {
+      title: t("help.correlation.title"),
+      body: t("help.correlation.body"),
+      classes: ["MessageDatabase", "KahaAddMessageCommand", "KahaRemoveMessageCommand"],
     },
   };
 }
@@ -435,6 +448,7 @@ function ExplorerApp() {
               {result && id === "destinations" ? <span className="nav-count">{result.destinations.length}</span> : null}
               {result && id === "subscriptions" ? <span className="nav-count">{result.subscriptions.length}</span> : null}
               {result && id === "messages" ? <span className="nav-count">{result.messages.length}</span> : null}
+              {result && id === "evidence" ? <span className="nav-count">{result.correlation.links.length}</span> : null}
             </button>
           ))}
         </nav>
@@ -474,6 +488,7 @@ function ExplorerApp() {
               {activeView === "destinations" ? <DestinationsView result={result} help={help} onSelect={selectItem} onHelp={setContextHelp} /> : null}
               {activeView === "subscriptions" ? <SubscriptionsView result={result} help={help} onSelect={selectItem} onHelp={setContextHelp} /> : null}
               {activeView === "messages" ? <MessagesView result={result} onSelect={selectItem} /> : null}
+              {activeView === "evidence" ? <EvidenceView result={result} help={help} onSelect={selectItem} onHelp={setContextHelp} /> : null}
               {activeView === "files" ? <FilesView result={result} onSelect={selectItem} /> : null}
             </>
           ) : null}
@@ -655,6 +670,27 @@ function MessagesView({ result, onSelect }: { result: ScanResult; onSelect: (ite
   return <div className="view-stack"><FilterBar value={filter} onChange={setFilter} placeholder={t("filter.message")} count={rows.length} /><DataTable key={filter} rows={rows} columns={columns} rowKey={(item) => item.id} onRowClick={(item) => onSelect({ type: "message", value: item })} empty={t("empty.message")} /></div>;
 }
 
+function evidenceKind(kind: EvidenceLink["kind"], t: Translator) {
+  return t(`evidence.kind.${kind}`);
+}
+
+function EvidenceView({ result, help, onSelect, onHelp }: { result: ScanResult; help: Record<string, ContextHelp>; onSelect: (item: Selected) => void; onHelp: (help: ContextHelp) => void }) {
+  const { t } = useI18n();
+  const [filter, setFilter] = useState("");
+  const rows = result.correlation.links.filter((item) =>
+    `${item.kind} ${item.primaryId} ${item.destination} ${item.journal} ${item.transactionId}`.toLowerCase().includes(filter.toLowerCase()),
+  );
+  const columns: TableColumn<EvidenceLink>[] = [
+    { key: "kind", label: t("table.entity"), value: (item) => evidenceKind(item.kind, t), render: (item) => <Badge tone={item.kind === "advisory" ? "violet" : item.kind === "transaction" ? "amber" : "blue"}>{evidenceKind(item.kind, t)}</Badge> },
+    { key: "id", label: t("table.relatedId"), value: (item) => item.primaryId, className: "mono-cell", render: (item) => <span title={item.primaryId}>{compactId(item.primaryId, 24, 10)}</span> },
+    { key: "destination", label: t("table.destination"), value: (item) => item.destination, className: "mono-cell" },
+    { key: "journal", label: t("table.journal"), value: (item) => item.journal, render: (item) => <span title={item.journal}>{compactId(item.journal, 28, 12)}</span> },
+    { key: "offset", label: t("table.offset"), value: (item) => item.offset ?? -1, className: "mono-cell", render: (item) => item.offset === null ? t("type.unknown") : formatOffset(item.offset) },
+    { key: "evidence", label: t("table.evidence"), value: (item) => t(`confidence.${item.confidence}`), render: (item) => <ConfidenceBadge confidence={item.confidence} /> },
+  ];
+  return <div className="view-stack"><FilterBar value={filter} onChange={setFilter} placeholder={t("filter.evidence")} count={rows.length} onHelp={() => onHelp(help.correlation)} /><div className="best-effort"><Info size={15} /><span>{t("evidence.limit")}</span></div><DataTable key={filter} rows={rows} columns={columns} rowKey={(item) => item.id} onRowClick={(item) => onSelect({ type: "correlation", value: item })} empty={t("empty.evidence")} /></div>;
+}
+
 function FilesView({ result, onSelect }: { result: ScanResult; onSelect: (item: Selected) => void }) {
   const { t, locale } = useI18n();
   const [filter, setFilter] = useState("");
@@ -671,13 +707,16 @@ function FilesView({ result, onSelect }: { result: ScanResult; onSelect: (item: 
 
 function DetailPanel({ selected, result, onClose, onSelect }: { selected: Selected; result: ScanResult | null; onClose: () => void; onSelect: (item: Selected) => void }) {
   const { t } = useI18n();
-  return <aside className="detail-panel"><div className="detail-head"><div><span>{t("detail.panel")}</span><strong>{selected ? detailTitle(selected) : t("detail.selected")}</strong></div><button onClick={onClose} aria-label={t("header.detailClose")}><X size={17} /></button></div><ScrollArea className="detail-scroll">{!selected ? <div className="detail-empty"><PanelRightOpen size={27} /><h3>{t("detail.emptyTitle")}</h3><p>{t("detail.emptyBody")}</p></div> : null}{selected?.type === "destination" ? <DestinationDetail value={selected.value} result={result} onSelect={onSelect} /> : null}{selected?.type === "subscription" ? <SubscriptionDetail value={selected.value} result={result} onSelect={onSelect} /> : null}{selected?.type === "message" ? <MessageDetail value={selected.value} /> : null}{selected?.type === "file" ? <FileDetail value={selected.value} result={result} onSelect={onSelect} /> : null}</ScrollArea></aside>;
+  return <aside className="detail-panel"><div className="detail-head"><div><span>{t("detail.panel")}</span><strong>{selected ? detailTitle(selected) : t("detail.selected")}</strong></div><button onClick={onClose} aria-label={t("header.detailClose")}><X size={17} /></button></div><ScrollArea className="detail-scroll">{!selected ? <div className="detail-empty"><PanelRightOpen size={27} /><h3>{t("detail.emptyTitle")}</h3><p>{t("detail.emptyBody")}</p></div> : null}{selected?.type === "destination" ? <DestinationDetail value={selected.value} result={result} onSelect={onSelect} /> : null}{selected?.type === "subscription" ? <SubscriptionDetail value={selected.value} result={result} onSelect={onSelect} /> : null}{selected?.type === "message" ? <MessageDetail value={selected.value} /> : null}{selected?.type === "correlation" ? <CorrelationDetail value={selected.value} result={result} onSelect={onSelect} /> : null}{selected?.type === "record" ? <StructuredRecordDetail value={selected.value} result={result} onSelect={onSelect} /> : null}{selected?.type === "raw" ? <RawEvidenceDetail value={selected.value} /> : null}{selected?.type === "file" ? <FileDetail value={selected.value} result={result} onSelect={onSelect} /> : null}</ScrollArea></aside>;
 }
 
 function detailTitle(selected: NonNullable<Selected>) {
   if (selected.type === "destination") return selected.value.name;
   if (selected.type === "subscription") return compactId(selected.value.rawId, 20, 10);
   if (selected.type === "message") return formatOffset(selected.value.offset);
+  if (selected.type === "correlation") return compactId(selected.value.primaryId, 20, 10);
+  if (selected.type === "record") return selected.value.command;
+  if (selected.type === "raw") return formatOffset(selected.value.offset);
   return selected.value.name;
 }
 
@@ -706,6 +745,46 @@ function MessageDetail({ value }: { value: MessageCandidate }) {
   const { t } = useI18n();
   const sourceTrace = sourceTraceFor(value, t);
   return <div className="detail-body"><div className="detail-badges"><Badge tone="blue">{t("detail.recordCandidate")}</Badge><ConfidenceBadge confidence={value.confidence} /></div><Tabs defaultValue="summary" className="detail-tabs"><TabsList><TabsTrigger value="summary">{t("tab.summary")}</TabsTrigger><TabsTrigger value="strings">{t("tab.strings")}</TabsTrigger><TabsTrigger value="hex">{t("tab.hex")}</TabsTrigger><TabsTrigger value="source">{t("tab.source")}</TabsTrigger></TabsList><TabsContent value="summary"><DetailSection title={t("detail.recordSummary")}><DetailField label={t("table.journal")} value={value.journal} mono copy /><DetailField label={t("table.offset")} value={formatOffset(value.offset)} mono copy /><DetailField label={t("table.destination")} value={value.destination} mono copy /><DetailField label={t("detail.detectedType")} value={value.detectedType === "Unknown" ? t("type.unknown") : value.detectedType} /><DetailField label={t("table.relatedId")} value={value.relatedId === "Unknown" ? t("type.unknown") : value.relatedId} mono copy /><DetailField label={t("table.operation")} value={<Badge tone={value.operation === "Unknown" ? "neutral" : "blue"}>{displayOperation(value.operation, t)}</Badge>} /></DetailSection><div className="unknown-note"><AlertCircle size={15} /> {t("detail.unknownOperation")}</div></TabsContent><TabsContent value="strings"><DetailSection title={t("detail.nearbyStrings")}><div className="strings-list">{value.strings.length ? value.strings.map((item, index) => <div key={`${item.offset}-${index}`}><code>{formatOffset(item.offset)}</code><span>{item.value}</span><CopyButton value={item.value} /></div>) : <MiniEmpty label={t("detail.noStrings")} />}</div></DetailSection></TabsContent><TabsContent value="hex"><DetailSection title={t("detail.hexPreview")}><pre className="hex-view">{value.hex || t("type.unknown")}</pre><p className="tab-note">{t("detail.hexNote")}</p></DetailSection></TabsContent><TabsContent value="source"><div className="source-version-note"><Info size={15} />{t("detail.sourceVersionNote")}</div><DetailSection title={t("detail.sourceTrace")}><div className="source-trace">{sourceTrace.map((item, index) => <div key={item.name}><span>{index + 1}</span><div><strong>{item.name}</strong><p>{item.why}</p><code>{item.focus}</code></div></div>)}</div></DetailSection></TabsContent></Tabs></div>;
+}
+
+function resolveEvidenceRef(ref: EvidenceRef, result: ScanResult | null): Selected {
+  if (!result) return null;
+  if (ref.kind === "parsed-record") {
+    const record = result.structured.records.find((item) => `parsed:${item.file}:${item.location.offset}` === ref.recordId);
+    return record ? { type: "record", value: record } : null;
+  }
+  if (ref.kind === "raw-string") {
+    const raw = result.strings.find((item) => item.id === ref.rawId || (item.file === ref.file && item.offset === ref.offset));
+    return raw ? { type: "raw", value: raw } : null;
+  }
+  if (ref.kind === "message-candidate") {
+    const message = result.messages.find((item) => item.id === ref.messageId);
+    return message ? { type: "message", value: message } : null;
+  }
+  if (ref.kind === "subscription-candidate") {
+    const subscription = result.subscriptions.find((item) => item.id === ref.subscriptionId);
+    return subscription ? { type: "subscription", value: subscription } : null;
+  }
+  const file = result.files.find((item) => item.path === ref.file);
+  return file ? { type: "file", value: file } : null;
+}
+
+function CorrelationDetail({ value, result, onSelect }: { value: EvidenceLink; result: ScanResult | null; onSelect: (item: Selected) => void }) {
+  const { t } = useI18n();
+  const file = result?.files.find((item) => item.path === value.journal);
+  return <div className="detail-body"><div className="detail-badges"><Badge tone={value.kind === "advisory" ? "violet" : "blue"}>{evidenceKind(value.kind, t)}</Badge><ConfidenceBadge confidence={value.confidence} /></div><div className="best-effort"><Info size={15} /><span>{t("evidence.limit")}</span></div><DetailSection title={t("detail.evidenceLink")}><DetailField label={t("table.relatedId")} value={value.primaryId} mono copy /><DetailField label={t("table.destination")} value={value.destination} mono copy /><DetailField label={t("table.journal")} value={file ? <button className="text-link" onClick={() => onSelect({ type: "file", value: file })}>{value.journal}</button> : value.journal} mono /><DetailField label={t("table.offset")} value={value.offset === null ? t("type.unknown") : formatOffset(value.offset)} mono /><DetailField label={t("detail.ackStatus")} value={t(`evidence.ack.${value.ackStatus}`)} /><DetailField label={t("detail.transaction")} value={value.transactionId} mono /></DetailSection><DetailSection title={t("detail.interpretation")}><p className="tab-note">{value.interpretation}</p></DetailSection><DetailSection title={t("detail.evidenceRefs")}><div className="related-list">{value.evidenceRefs.map((ref) => { const target = resolveEvidenceRef(ref, result); return <button key={ref.id} disabled={!target} onClick={() => target && onSelect(target)}><span>{ref.kind}</span><small>{ref.file}{ref.offset === null ? "" : ` · ${formatOffset(ref.offset)}`}</small><ConfidenceBadge confidence={ref.confidence} /><ChevronRight size={14} /></button>; })}</div></DetailSection></div>;
+}
+
+function StructuredRecordDetail({ value, result, onSelect }: { value: StructuredRecord; result: ScanResult | null; onSelect: (item: Selected) => void }) {
+  const { t } = useI18n();
+  const file = result?.files.find((item) => item.path === value.file);
+  const related = result?.correlation.links.filter((link) => link.evidenceRefs.some((ref) => ref.recordId === `parsed:${value.file}:${value.location.offset}`)) || [];
+  return <div className="detail-body"><div className="detail-badges"><Badge tone="blue">{t("detail.record")}</Badge><ConfidenceBadge confidence={value.confidence} /></div><DetailSection title={value.command}><DetailField label={t("table.journal")} value={file ? <button className="text-link" onClick={() => onSelect({ type: "file", value: file })}>{value.file}</button> : value.file} mono /><DetailField label={t("table.offset")} value={formatOffset(value.location.offset)} mono copy /><DetailField label={t("table.size")} value={value.location.size.toLocaleString()} /><DetailField label={t("table.destination")} value={value.destination?.name || t("type.unknown")} mono /><DetailField label={t("table.relatedId")} value={value.messageId || value.subscriptionKey || t("type.unknown")} mono /><DetailField label={t("detail.transaction")} value={value.transactionId || t("type.unknown")} mono /></DetailSection><DetailSection title={t("detail.relatedRecords")}><div className="related-list">{related.map((link) => <button key={link.id} onClick={() => onSelect({ type: "correlation", value: link })}><span>{evidenceKind(link.kind, t)}</span><small>{link.primaryId}</small><ChevronRight size={14} /></button>)}</div></DetailSection></div>;
+}
+
+function RawEvidenceDetail({ value }: { value: StringHit }) {
+  const { t } = useI18n();
+  return <div className="detail-body"><div className="detail-badges"><Badge tone="green">{t("detail.rawString")}</Badge><ConfidenceBadge confidence={value.confidence} /></div><DetailSection title={t("detail.rawString")}><DetailField label={t("table.journal")} value={value.file} mono copy /><DetailField label={t("table.offset")} value={formatOffset(value.offset)} mono copy /><DetailField label={t("detail.value")} value={value.value} mono copy /></DetailSection></div>;
 }
 
 function FileDetail({ value, result, onSelect }: { value: ScanFile; result: ScanResult | null; onSelect: (item: Selected) => void }) {

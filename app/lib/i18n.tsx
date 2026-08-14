@@ -213,6 +213,30 @@ const messages: Record<Locale, Record<string, string>> = {
     "source.destination.why": "목적지 유형과 실제 이름 해석을 확인합니다.",
     "source.cursor.why": "미전달 메시지가 어떤 cursor에 보관되는지 확인합니다.",
     "source.queueTopic.why": "선택 목적지의 Broker-side 전달 경로를 확인합니다."
+    ,"nav.evidence": "증거 연결"
+    ,"view.evidence.title": "증거 연결"
+    ,"view.evidence.desc": "구조화 레코드와 원문 증거를 메시지, 구독, 트랜잭션 및 Advisory 관계로 연결합니다."
+    ,"filter.evidence": "ID, 목적지, 파일 또는 트랜잭션으로 찾기"
+    ,"table.entity": "연결 종류"
+    ,"empty.evidence": "연결할 수 있는 증거가 없습니다."
+    ,"evidence.kind.message": "메시지"
+    ,"evidence.kind.subscription": "구독"
+    ,"evidence.kind.transaction": "트랜잭션"
+    ,"evidence.kind.advisory": "Advisory"
+    ,"evidence.limit": "이 화면은 발견된 증거의 관계를 보여주며 장애 원인을 자동으로 판정하지 않습니다."
+    ,"evidence.ack.Observed": "ACK 레코드 확인"
+    ,"evidence.ack.Not observed": "ACK 레코드 미확인"
+    ,"evidence.ack.Unknown": "확인 불가"
+    ,"detail.evidenceLink": "증거 관계"
+    ,"detail.ackStatus": "ACK 확인 상태"
+    ,"detail.transaction": "트랜잭션"
+    ,"detail.interpretation": "해석 범위"
+    ,"detail.evidenceRefs": "근거 위치"
+    ,"detail.record": "구조화 레코드"
+    ,"detail.rawString": "원문 문자열"
+    ,"detail.value": "값"
+    ,"help.correlation.title": "증거 연결"
+    ,"help.correlation.body": "동일한 메시지 ID, 목적지, 트랜잭션 ID 및 레코드 위치를 기준으로 연결합니다. 레코드가 보이지 않는다는 사실만으로 해당 사건이 없었다고 판단하지 않습니다."
   },
   en: {
     "brand.subtitle": "STORE EVIDENCE EXPLORER",
@@ -333,6 +357,30 @@ const messages: Record<Locale, Record<string, string>> = {
     "help.confidence.title": "Evidence level", "help.confidence.body": "Observed values exist in the file. Parsed values follow a known format. Pattern matches and inferences require further verification.",
     "help.cursor.title": "File-backed pending cursor", "help.cursor.body": "A structure that stores undelivered messages in files. Confirm the owning subscription in the deployed product source.",
     "source.advisorySupport.why": "Check how the advisory destination name is created.", "source.destinationInfo.why": "Check the Temporary Destination command and operationType.", "source.advisoryBroker.why": "Check where the advisory payload is emitted after a state change.", "source.topicSubscription.why": "Check when topic messages enter the pending cursor.", "source.destination.why": "Check destination type and physical-name decoding.", "source.cursor.why": "Check which cursor retains undelivered messages.", "source.queueTopic.why": "Check the broker-side dispatch path for the selected destination."
+    ,"nav.evidence": "Evidence links"
+    ,"view.evidence.title": "Evidence links"
+    ,"view.evidence.desc": "Follow structured records and raw evidence across messages, subscriptions, transactions, and Advisories."
+    ,"filter.evidence": "Find by ID, destination, file, or transaction"
+    ,"table.entity": "Link type"
+    ,"empty.evidence": "No evidence relationships are available."
+    ,"evidence.kind.message": "Message"
+    ,"evidence.kind.subscription": "Subscription"
+    ,"evidence.kind.transaction": "Transaction"
+    ,"evidence.kind.advisory": "Advisory"
+    ,"evidence.limit": "This view connects evidence that was found; it does not automatically determine an outage cause."
+    ,"evidence.ack.Observed": "ACK record observed"
+    ,"evidence.ack.Not observed": "ACK record not observed"
+    ,"evidence.ack.Unknown": "Unknown"
+    ,"detail.evidenceLink": "Evidence relationship"
+    ,"detail.ackStatus": "ACK evidence"
+    ,"detail.transaction": "Transaction"
+    ,"detail.interpretation": "Interpretation boundary"
+    ,"detail.evidenceRefs": "Evidence references"
+    ,"detail.record": "Structured record"
+    ,"detail.rawString": "Raw string"
+    ,"detail.value": "Value"
+    ,"help.correlation.title": "Evidence correlation"
+    ,"help.correlation.body": "Links use matching message IDs, destinations, transaction IDs, and record locations. A missing record is not treated as proof that an event never occurred."
   }
 };
 

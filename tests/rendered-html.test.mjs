@@ -29,8 +29,9 @@ test("server-renders the MQ Watcher read-only explorer", async () => {
 });
 
 test("ships the bounded worker scanner, localized UI, and sortable tables", async () => {
-  const [worker, explorer, layout] = await Promise.all([
+  const [worker, correlation, explorer, layout] = await Promise.all([
     readFile(new URL("../public/store-scanner.worker.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/evidence-correlation.js", import.meta.url), "utf8"),
     readFile(new URL("../app/components/StoreExplorer.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
   ]);
@@ -38,11 +39,15 @@ test("ships the bounded worker scanner, localized UI, and sortable tables", asyn
   assert.match(worker, /CHUNK_SIZE = 4 \* 1024 \* 1024/);
   assert.match(worker, /Unknown Store Layout/);
   assert.match(worker, /operationType/);
+  assert.match(worker, /correlateEvidence/);
+  assert.match(correlation, /does not prove that the message was never acknowledged/);
   assert.match(explorer, /showDirectoryPicker\(\{ mode: "read" \}\)/);
   assert.match(explorer, /FilePendingMessageCursor/);
   assert.match(explorer, /I18nProvider/);
   assert.match(explorer, /sort-button/);
   assert.match(explorer, /pageSize/);
+  assert.match(explorer, /EvidenceView/);
+  assert.match(explorer, /resolveEvidenceRef/);
   assert.doesNotMatch(explorer, /InvestigationView|ClassesView|mobile-menu/);
   assert.match(layout, /<html lang="ko">/);
   await access(new URL("../public/store-scanner.worker.js", import.meta.url));

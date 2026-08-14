@@ -60,6 +60,75 @@
     ],
     "truncated": false
   },
+  "correlation": {
+    "links": [
+      {
+        "id": "advisory-candidate:db-1.log:0:advisory",
+        "kind": "advisory",
+        "primaryId": "ID:MESSAGE:advisory:001",
+        "destination": "ActiveMQ.Advisory.TempQueue",
+        "journal": "db-1.log",
+        "offset": 0,
+        "ackStatus": "Unknown",
+        "transactionId": "Unknown",
+        "confidence": "Observed",
+        "evidenceRefs": [
+          {
+            "id": "file:db-1.log",
+            "kind": "source-file",
+            "file": "db-1.log",
+            "offset": null,
+            "confidence": "Observed"
+          },
+          {
+            "id": "message-candidate:db-1.log:0:advisory",
+            "kind": "message-candidate",
+            "file": "db-1.log",
+            "offset": 0,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:0",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 0,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:28",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 28,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:44",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 44,
+            "confidence": "Observed"
+          },
+          {
+            "id": "raw:db-1.log:60",
+            "kind": "raw-string",
+            "file": "db-1.log",
+            "offset": 60,
+            "confidence": "Observed"
+          }
+        ]
+      }
+    ],
+    "counts": {
+      "messages": 0,
+      "subscriptions": 0,
+      "transactions": 0,
+      "advisories": 1
+    },
+    "warnings": [
+      "Correlations describe relationships found in the scanned evidence; they do not identify an outage cause.",
+      "A record not found in the scanned evidence is not proof that the event never occurred."
+    ]
+  },
   "totals": {
     "bytes": 92,
     "journalFiles": 1,

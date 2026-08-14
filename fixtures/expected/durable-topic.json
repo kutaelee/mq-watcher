@@ -33,7 +33,7 @@
       "relatedStore": "journal/data-1",
       "relatedDestination": "PRICES",
       "occurrences": 1,
-      "confidence": "Parsed"
+      "confidence": "Pattern Match"
     }
   ],
   "messageCandidates": [],
@@ -45,6 +45,47 @@
     "records": [],
     "warnings": [],
     "truncated": false
+  },
+  "correlation": {
+    "links": [
+      {
+        "id": "subscription-candidate:ID:DURABLE.CLIENT:1700000000000:-1:5",
+        "kind": "subscription",
+        "primaryId": "ID:DURABLE.CLIENT:1700000000000:-1:5",
+        "destination": "PRICES",
+        "journal": "journal/data-1",
+        "offset": null,
+        "ackStatus": "Unknown",
+        "transactionId": "Unknown",
+        "confidence": "Pattern Match",
+        "evidenceRefs": [
+          {
+            "id": "file:journal/data-1",
+            "kind": "source-file",
+            "file": "journal/data-1",
+            "offset": null,
+            "confidence": "Observed"
+          },
+          {
+            "id": "subscription-candidate:ID:DURABLE.CLIENT:1700000000000:-1:5",
+            "kind": "subscription-candidate",
+            "file": "journal/data-1",
+            "offset": null,
+            "confidence": "Pattern Match"
+          }
+        ]
+      }
+    ],
+    "counts": {
+      "messages": 0,
+      "subscriptions": 1,
+      "transactions": 0,
+      "advisories": 0
+    },
+    "warnings": [
+      "Correlations describe relationships found in the scanned evidence; they do not identify an outage cause.",
+      "A record not found in the scanned evidence is not proof that the event never occurred."
+    ]
   },
   "totals": {
     "bytes": 116,

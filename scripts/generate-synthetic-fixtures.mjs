@@ -188,6 +188,15 @@ const subscription = Buffer.concat([
   protoBytes(2, Buffer.from("client-a:prices", "utf8")),
 ]);
 const commit = protoBytes(1, transactionInfo);
+const removeMessage = Buffer.concat([
+  protoBytes(2, destination(0, "ORDERS")),
+  protoBytes(3, Buffer.from("ID:MESSAGE:1", "utf8")),
+]);
+const advisoryMessage = Buffer.concat([
+  protoBytes(2, destination(1, "ActiveMQ.Advisory.TempQueue")),
+  protoBytes(3, Buffer.from("ID:ADVISORY:1", "utf8")),
+  protoBytes(4, Buffer.from([0x03, 0x04])),
+]);
 await put(
   "kahadb-framing",
   "db-1.log",
@@ -195,6 +204,8 @@ await put(
     command(1, addMessage),
     command(7, subscription),
     command(4, commit),
+    command(2, removeMessage),
+    command(1, advisoryMessage),
   ]),
 );
 
