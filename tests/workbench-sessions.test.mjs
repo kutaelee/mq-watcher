@@ -243,9 +243,10 @@ test("evidence timeline uses deterministic file and offset order without timesta
     { file: "db-1.log", location: { dataFileId: 1, offset: 40 }, command: "Later", status: "Parsed", confidence: "Parsed" },
     { file: "db-1.log", location: { dataFileId: 1, offset: 8 }, command: "First", status: "Partial", confidence: "Parsed" },
   ] } };
-  const timeline = buildEvidenceTimeline(result, 2);
-  assert.deepEqual(timeline.events.map((event) => event.command), ["First", "Later"]);
-  assert.equal(timeline.truncated, true);
+  const timeline = buildEvidenceTimeline(result, 10);
+  assert.deepEqual(timeline.events.filter((event) => event.file === "db-1.log").map((event) => event.command), ["First", "Later"]);
+  assert.deepEqual(timeline.events.filter((event) => event.file === "db-2.log").map((event) => event.command), ["Second"]);
+  assert.equal(timeline.truncated, false);
   assert.equal(timeline.ordering, "per-journal-offset");
   assert.ok(timeline.events.every((event) => !("timestamp" in event) && !("time" in event)));
 });
