@@ -117,7 +117,7 @@ Golden results are deterministic, result collections are bounded, and before/aft
 - Corruption recovery and resynchronization are intentionally not performed.
 - A selected directory may omit older journal files or external evidence.
 - The browser cache contains analysis results, not original files, but those results can still contain operational identifiers.
-- Actual Linux and Node 22.13 execution remains pending CI completion; local validation used Windows 11, Node 24.18.0, and npm 11.16.0.
+- CI validates the test suite on current Ubuntu and Windows runners with Node 22.13.0; local validation used Windows 11, Node 24.18.0, and npm 11.16.0. This does not constitute broker-runtime compatibility proof.
 
 ## Security / privacy
 
