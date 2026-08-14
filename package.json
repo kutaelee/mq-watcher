@@ -33,6 +33,7 @@
     "dev": "vinext dev",
     "build": "vinext build",
     "build:portable": "npm run build && node scripts/build-portable.mjs",
+    "test:portable-cache": "node --test tests/portable-cache.test.mjs",
     "test:portable": "node scripts/smoke-portable.mjs",
     "start": "vinext start",
     "test": "npm run build && node --test tests/*.test.mjs",

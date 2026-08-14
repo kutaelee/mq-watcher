@@ -1,10 +1,10 @@
 "use strict";
 /* eslint-disable @typescript-eslint/no-require-imports -- Node SEA injected mains are CommonJS. */
 
-const { createHash } = require("node:crypto");
+const { createHash, randomUUID } = require("node:crypto");
 const { spawn } = require("node:child_process");
 const { createReadStream } = require("node:fs");
-const { mkdir, readFile, rename, rm, stat, writeFile } = require("node:fs/promises");
+const { lstat, mkdir, open, readFile, readdir, rename, rm, stat, writeFile } = require("node:fs/promises");
 const { createServer } = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
@@ -22,6 +22,11 @@ const CONTENT_TYPES = new Map([
   [".woff", "font/woff"],
   [".woff2", "font/woff2"],
 ]);
+const MANIFEST_SCHEMA_VERSION = 1;
+const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+const SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+const CACHE_LOCK_TIMEOUT_MS = 30_000;
+const CACHE_LOCK_STALE_MS = 10 * 60_000;
 
 function parsePort(value) {
   const port = Number(value);
@@ -74,6 +79,38 @@ function assetBuffer(key) {
   return Buffer.from(sea.getRawAsset(key));
 }
 
+function validateManifest(manifest) {
+  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) throw new Error("Invalid packaged application manifest");
+  if (manifest.schemaVersion !== MANIFEST_SCHEMA_VERSION) {
+    throw new Error(`Unsupported packaged application manifest schema: ${manifest.schemaVersion}`);
+  }
+  if (typeof manifest.version !== "string" || !SEMVER_PATTERN.test(manifest.version)) {
+    throw new Error(`Invalid packaged application version: ${manifest.version}`);
+  }
+  if (!Array.isArray(manifest.files) || manifest.files.length === 0) throw new Error("Packaged application manifest has no files");
+
+  const paths = new Set();
+  for (const file of manifest.files) {
+    if (!file || typeof file !== "object" || Array.isArray(file)) throw new Error("Invalid packaged file entry");
+    if (typeof file.path !== "string" || file.path.length === 0) throw new Error("Packaged file path is missing");
+    const hasControlCharacter = [...file.path].some((character) => character.charCodeAt(0) < 32);
+    if (file.path === ".manifest-sha256" || file.path.includes("\\") || /[:*?"<>|]/.test(file.path) || hasControlCharacter) {
+      throw new Error(`Unsafe packaged path: ${file.path}`);
+    }
+    const segments = file.path.split("/");
+    if (path.posix.isAbsolute(file.path) || path.posix.normalize(file.path) !== file.path || segments.some((segment) => !segment || segment === "." || segment === "..")) {
+      throw new Error(`Unsafe packaged path: ${file.path}`);
+    }
+    if (paths.has(file.path)) throw new Error(`Duplicate packaged path: ${file.path}`);
+    paths.add(file.path);
+    if (!Number.isSafeInteger(file.size) || file.size < 0) throw new Error(`Invalid packaged file size: ${file.path}`);
+    if (typeof file.sha256 !== "string" || !SHA256_PATTERN.test(file.sha256)) {
+      throw new Error(`Invalid packaged file checksum: ${file.path}`);
+    }
+  }
+  return manifest;
+}
+
 function targetFor(root, relativePath) {
   const target = path.resolve(root, ...relativePath.split("/"));
   if (target !== root && !target.startsWith(`${root}${path.sep}`)) throw new Error(`Unsafe packaged path: ${relativePath}`);
@@ -82,9 +119,45 @@ function targetFor(root, relativePath) {
 
 async function validateExtracted(root, manifest, manifestHash) {
   try {
+    validateManifest(manifest);
+    const rootMetadata = await lstat(root);
+    if (!rootMetadata.isDirectory() || rootMetadata.isSymbolicLink()) return false;
     if ((await readFile(path.join(root, ".manifest-sha256"), "utf8")).trim() !== manifestHash) return false;
+
+    const expectedFiles = new Set([".manifest-sha256", ...manifest.files.map((file) => file.path)]);
+    const expectedDirectories = new Set();
     for (const file of manifest.files) {
-      if (digest(await readFile(targetFor(root, file.path))) !== file.sha256) return false;
+      let parent = path.posix.dirname(file.path);
+      while (parent !== ".") {
+        expectedDirectories.add(parent);
+        parent = path.posix.dirname(parent);
+      }
+    }
+    const observedFiles = new Set();
+    const observedDirectories = new Set();
+    async function walk(current, relative) {
+      const entries = await readdir(current, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isSymbolicLink()) throw new Error(`Symbolic link in application cache: ${entry.name}`);
+        const childRelative = relative ? `${relative}/${entry.name}` : entry.name;
+        const absolute = path.join(current, entry.name);
+        if (entry.isDirectory()) {
+          observedDirectories.add(childRelative);
+          await walk(absolute, childRelative);
+        } else if (entry.isFile()) observedFiles.add(childRelative);
+        else throw new Error(`Unsupported entry in application cache: ${childRelative}`);
+      }
+    }
+    await walk(root, "");
+    if (observedFiles.size !== expectedFiles.size || observedDirectories.size !== expectedDirectories.size) return false;
+    for (const filePath of observedFiles) if (!expectedFiles.has(filePath)) return false;
+    for (const directoryPath of observedDirectories) if (!expectedDirectories.has(directoryPath)) return false;
+
+    for (const file of manifest.files) {
+      const target = targetFor(root, file.path);
+      const metadata = await lstat(target);
+      if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size !== file.size) return false;
+      if (digest(await readFile(target)) !== file.sha256) return false;
     }
     return true;
   } catch {
@@ -92,28 +165,104 @@ async function validateExtracted(root, manifest, manifestHash) {
   }
 }
 
-async function extractApplication() {
-  const manifestBytes = assetBuffer("app-manifest.json");
+function delay(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function acquireCacheLock(lockPath) {
+  const deadline = Date.now() + CACHE_LOCK_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    let handle;
+    try {
+      handle = await open(lockPath, "wx");
+      await handle.writeFile(`${JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() })}\n`);
+      return async () => {
+        try {
+          await handle.close();
+        } finally {
+          await rm(lockPath, { force: true });
+        }
+      };
+    } catch (error) {
+      if (handle) {
+        await handle.close().catch(() => undefined);
+        await rm(lockPath, { force: true }).catch(() => undefined);
+      }
+      if (!error || error.code !== "EEXIST") throw error;
+      const metadata = await stat(lockPath).catch(() => null);
+      if (metadata && Date.now() - metadata.mtimeMs > CACHE_LOCK_STALE_MS) {
+        const stalePath = `${lockPath}.${process.pid}.${randomUUID()}.stale`;
+        try {
+          await rename(lockPath, stalePath);
+          await rm(stalePath, { force: true });
+          continue;
+        } catch {
+          // Another process may have recovered or released the lock first.
+        }
+      }
+      await delay(25);
+    }
+  }
+  throw new Error(`Timed out waiting for application cache lock: ${lockPath}`);
+}
+
+function isPublishCollision(error) {
+  return Boolean(error && ["EEXIST", "ENOTEMPTY", "EPERM"].includes(error.code));
+}
+
+async function publishExtracted(temporary, root, manifest, manifestHash) {
+  try {
+    await rename(temporary, root);
+    return;
+  } catch (error) {
+    if (!isPublishCollision(error)) throw error;
+    if (await validateExtracted(root, manifest, manifestHash)) return;
+  }
+
+  const lockPath = `${root}.lock`;
+  const releaseLock = await acquireCacheLock(lockPath);
+  let quarantine;
+  try {
+    if (await validateExtracted(root, manifest, manifestHash)) return;
+    if (await stat(root).then(() => true, () => false)) {
+      quarantine = `${root}.${process.pid}.${randomUUID()}.invalid`;
+      await rename(root, quarantine);
+    }
+    try {
+      await rename(temporary, root);
+    } catch (error) {
+      if (quarantine && !await stat(root).then(() => true, () => false)) await rename(quarantine, root).catch(() => undefined);
+      throw error;
+    }
+    if (quarantine) await rm(quarantine, { recursive: true, force: true });
+  } finally {
+    await releaseLock();
+  }
+}
+
+async function extractApplication({ cacheRoot = cacheBase(), readAsset = assetBuffer } = {}) {
+  const manifestBytes = Buffer.from(readAsset("app-manifest.json"));
   const manifestHash = digest(manifestBytes);
-  const manifest = JSON.parse(manifestBytes.toString("utf8"));
-  const root = path.join(cacheBase(), `${manifest.version}-${manifestHash.slice(0, 16)}`);
+  const manifest = validateManifest(JSON.parse(manifestBytes.toString("utf8")));
+  const resolvedCacheRoot = path.resolve(cacheRoot);
+  const root = targetFor(resolvedCacheRoot, `${manifest.version}-${manifestHash.slice(0, 16)}`);
   if (await validateExtracted(root, manifest, manifestHash)) return { root, manifest };
 
-  await mkdir(path.dirname(root), { recursive: true });
-  const temporary = `${root}.${process.pid}.${Date.now()}.tmp`;
+  await mkdir(resolvedCacheRoot, { recursive: true });
+  const temporary = `${root}.${process.pid}.${randomUUID()}.tmp`;
   await rm(temporary, { recursive: true, force: true });
   await mkdir(temporary, { recursive: true });
   try {
     for (const file of manifest.files) {
       const target = targetFor(temporary, file.path);
       await mkdir(path.dirname(target), { recursive: true });
-      const bytes = assetBuffer(`app/${file.path}`);
-      if (digest(bytes) !== file.sha256) throw new Error(`Packaged asset checksum mismatch: ${file.path}`);
+      const bytes = Buffer.from(readAsset(`app/${file.path}`));
+      if (bytes.length !== file.size || digest(bytes) !== file.sha256) throw new Error(`Packaged asset checksum mismatch: ${file.path}`);
       await writeFile(target, bytes, { flag: "wx" });
     }
     await writeFile(path.join(temporary, ".manifest-sha256"), `${manifestHash}\n`, { flag: "wx" });
-    if (await stat(root).then(() => true, () => false)) await rm(root, { recursive: true, force: true });
-    await rename(temporary, root);
+    if (!await validateExtracted(temporary, manifest, manifestHash)) throw new Error("Extracted application cache failed validation");
+    await publishExtracted(temporary, root, manifest, manifestHash);
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
@@ -231,7 +380,11 @@ async function main() {
   process.once("SIGTERM", close);
 }
 
-main().catch((error) => {
-  process.stderr.write(`MQ Watcher: ${error instanceof Error ? error.stack : String(error)}\n`);
-  process.exitCode = 1;
-});
+if (sea.isSea() || require.main === module) {
+  main().catch((error) => {
+    process.stderr.write(`MQ Watcher: ${error instanceof Error ? error.stack : String(error)}\n`);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { digest, extractApplication, validateExtracted, validateManifest };
