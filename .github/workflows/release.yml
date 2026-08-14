@@ -23,6 +23,7 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      - run: npm run test:e2e:indexeddb
       - run: npm run test:fixtures
       - run: npm run test:broker-fixtures
       - run: npm run test:portable-cache
