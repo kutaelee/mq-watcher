@@ -1,4 +1,5 @@
 import type { IncidentCase, ScanResult } from "./types";
+import { scopeIncidentCases } from "./workbench.mjs";
 import {
   applyDatabaseUpgrade,
   CACHE_SCHEMA_VERSION,
@@ -40,20 +41,13 @@ function openDatabase(): Promise<IDBDatabase> {
   });
 }
 
-export async function readIncidentCases(): Promise<IncidentCase[]> {
+export async function readIncidentCases(storeSignature?: string): Promise<IncidentCase[]> {
   if (typeof indexedDB === "undefined") return [];
   const db = await openDatabase();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(CASE_STORE, "readonly");
     const request = tx.objectStore(CASE_STORE).getAll();
-    request.onsuccess = () => resolve((request.result as IncidentCase[]).map((incident) => ({
-      ...incident,
-      pins: (incident.pins ?? []).map((pin) => ({
-        ...pin,
-        semanticKey: pin.semanticKey ?? `legacy:${pin.id}`,
-        provenance: pin.provenance ?? { file: (pin as unknown as { file?: string }).file ?? "", offset: (pin as unknown as { offset?: number | null }).offset ?? null },
-      })),
-    })).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+    request.onsuccess = () => resolve(scopeIncidentCases(request.result as IncidentCase[], storeSignature));
     request.onerror = () => reject(request.error);
     tx.oncomplete = () => db.close();
   });

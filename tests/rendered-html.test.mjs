@@ -29,10 +29,11 @@ test("server-renders the MQ Watcher read-only explorer", async () => {
 });
 
 test("ships the bounded worker scanner, localized UI, and sortable tables", async () => {
-  const [worker, correlation, explorer, layout] = await Promise.all([
+  const [worker, correlation, explorer, evidenceExport, layout] = await Promise.all([
     readFile(new URL("../public/store-scanner.worker.js", import.meta.url), "utf8"),
     readFile(new URL("../public/evidence-correlation.js", import.meta.url), "utf8"),
     readFile(new URL("../app/components/StoreExplorer.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/export/EvidenceExport.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
   ]);
 
@@ -46,6 +47,13 @@ test("ships the bounded worker scanner, localized UI, and sortable tables", asyn
   assert.match(explorer, /I18nProvider/);
   assert.match(explorer, /sort-button/);
   assert.match(explorer, /pageSize/);
+  assert.match(explorer, /loadMoreMessages/);
+  assert.match(explorer, /MessageTrace/);
+  assert.match(explorer, /traceScope: scope/);
+  assert.match(evidenceExport, /traceMessageEvidence\(\[result\], normalizedTraceId\)/);
+  assert.match(evidenceExport, /traceId\.trim\(\) && !normalizedTraceId/);
+  assert.match(explorer, /IncidentCase key=\{result\.signature\}/);
+  assert.match(explorer, /EvidenceTimeline key=\{result\.signature\}/);
   assert.match(explorer, /EvidenceView/);
   assert.match(explorer, /resolveEvidenceRef/);
   assert.match(explorer, /demo-scenario\.json/);
@@ -114,6 +122,7 @@ test("ships OSS safety guidance, broker fixture provenance, and portable release
     "destinations.png",
     "subscriptions.png",
     "messages.png",
+    "message-trace.png",
     "evidence-links-workbench.png",
     "files.png",
   ];

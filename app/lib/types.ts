@@ -211,10 +211,34 @@ export type CasePin = {
 
 export type IncidentCase = {
   id: string;
+  storeSignature: string;
+  storeName: string;
   title: string;
   hypothesis: string;
   notes: Array<{ id: string; text: string; createdAt: string }>;
   pins: CasePin[];
   createdAt: string;
   updatedAt: string;
+};
+
+export type MessageTraceEvidence = {
+  evidenceType: "ADD" | "ACK_REMOVE" | "TRANSACTION" | "SUBSCRIPTION_RELATED" | "DESTINATION_RELATED" | "RAW_OBSERVATION" | "UNKNOWN";
+  messageId: string;
+  destination?: string;
+  transactionId?: string;
+  sourceFile: string;
+  offset?: number;
+  recordId?: string;
+  confidence: "Parsed" | "Observed" | "Pattern Match" | "Unknown";
+  snapshotLabel?: string;
+  evidenceRef: string;
+};
+
+export type MessageTraceStoreResult = { storeSignature: string; storeName: string; evidence: MessageTraceEvidence[] };
+
+export type MessageTraceResult = {
+  messageId: string;
+  storeRefs: MessageTraceStoreResult[];
+  summary: { totalEvidence: number; addRecords: number; ackRemoveRecords: number; transactionRecords: number; destinationCount: number; journalCount: number; snapshotCount: number };
+  interpretationLimits: string[];
 };

@@ -47,6 +47,7 @@ test("central export sanitizer removes independent free-text and UTF-8 hex canar
     comparison: "COMPARISON-ONLY-CANARY-93007",
     directory: "DIRECTORY-ONLY-CANARY-93008",
     file: "FILE-ONLY-CANARY-93009.log",
+    traceMessageId: "ID:TRACE-ONLY-CANARY:93011",
   };
   const unicodeSecret = "민감정보-93010";
   const utf8Hex = [...new TextEncoder().encode(unicodeSecret)].map((byte) => byte.toString(16).padStart(2, "0"));
@@ -61,7 +62,8 @@ test("central export sanitizer removes independent free-text and UTF-8 hex canar
   const foreignSemanticKey = "message:FOREIGN-SEMANTIC-ID-CANARY-99221";
   const foreignFileSemanticKey = "source-file:FOREIGN/PATH/CANARY-11338.log";
   const incidentCase = { id: "case-safe", title: "safe", hypothesis: "safe", notes: [{ id: "note-safe", text: canaries.note, createdAt: "x" }], pins: [{ id: "pin-safe", label: canaries.label, storeName: foreignStoreName, semanticKey: foreignSemanticKey }, { id: "pin-file", label: "safe", storeName: foreignStoreName, semanticKey: foreignFileSemanticKey }], createdAt: "x", updatedAt: "x" };
-  const bundle = await buildEvidenceBundle({ result, incidentCase, comparison: [{ id: "comparison-safe", category: "message", key: canaries.comparison }], redaction: { identifiers: true, destinations: true, filePaths: true, notes: true }, generatedAt: "x" });
+  const messageTrace = { messageId: canaries.traceMessageId, storeRefs: [{ storeSignature: "safe-signature", storeName: "safe-store", evidence: [{ evidenceType: "ADD", messageId: canaries.traceMessageId, sourceFile: canaries.file, offset: 1, confidence: "Parsed", evidenceRef: `parsed:${canaries.traceMessageId}` }] }], summary: {}, interpretationLimits: [] };
+  const bundle = await buildEvidenceBundle({ result, incidentCase, comparison: [{ id: "comparison-safe", category: "message", key: canaries.comparison }], messageTrace, redaction: { identifiers: true, destinations: true, filePaths: true, notes: true }, generatedAt: "x" });
   const entries = readStoredZip(bundle.bytes);
   const allBytesText = new TextDecoder().decode(bundle.bytes);
   const allEntryText = [...entries.values()].map((value) => new TextDecoder().decode(value)).join("\n");

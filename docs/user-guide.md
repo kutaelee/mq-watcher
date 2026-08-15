@@ -8,7 +8,7 @@ Start MQ Watcher and choose **Load synthetic demo**. A first-time workspace star
 
 ## Visual help on every page
 
-Select **How to use this view** beside a page title. The three nodes show the recommended reading path. Their arrows do not assert event order or causality.
+Select **How to use this view** beside a page title. The guide explains prerequisites, when the page is useful, what evidence it can produce, a three-step reading path, and the page-specific interpretation boundary. Its arrows do not assert event order or causality.
 
 ![Three-step overview guide](screenshots/en/view-guide.png)
 
@@ -62,17 +62,23 @@ Filter grouped consumer IDs and inspect fields only where the observed format su
 
 ## 9. Messages
 
-Search message identifiers and destinations, sort the table, and use pagination for bounded browsing. Select a row when its source detail is needed.
+Search message identifiers and destinations, sort the table, use numbered pages or enter a page directly, and select a row when its source detail is needed. The first 2,500 candidates are loaded initially. If more evidence exists and the original Store is still available, select **Load next 2,500** repeatedly until MQ Watcher reports that all supported candidates are loaded. A cached-only session asks you to reopen the Store before continuing.
 
 ![Message candidates](screenshots/en/messages.png)
 
-## 10. Evidence links
+## 10. Trace a Message
+
+Enter one complete, case-sensitive `JMSMessageID`, choose Current Store, All Open Stores, or selected Store tabs, and run the trace. Read each Store separately and treat offset ordering as authoritative only within the same journal. Use **Select for case** to carry one evidence item into that Store's Incident Case view. See [the Message Trace guide](message-trace.md) for identity and interpretation limits.
+
+![Trace a Message results separated by Store and journal](screenshots/en/message-trace.png)
+
+## 11. Evidence links
 
 Search structured and raw relationships by identifier, destination, file, or transaction. Follow the journal and offset to supporting evidence. A link helps navigation; it does not automatically determine an outage cause.
 
 ![Evidence links](screenshots/en/evidence-links-workbench.png)
 
-## 11. Files
+## 12. Files
 
 Review file roles, sizes, modification times, and evidence levels. Modification time is file metadata and should not be treated as a broker-event timestamp.
 

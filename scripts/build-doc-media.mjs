@@ -8,6 +8,7 @@ const scenes = [
   "scenario-overview.png",
   "view-guide.png",
   "snapshot-compare.png",
+  "message-trace.png",
   "journal-progressive.png",
   "incident-case.png",
   "evidence-timeline.png",

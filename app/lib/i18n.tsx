@@ -17,6 +17,19 @@ const messages: Record<Locale, Record<string, string>> = {
     "guide.open": "이 화면 사용법",
     "guide.title": "화면 사용법",
     "guide.description": "이 화면에서 증거를 읽는 기본 흐름입니다.",
+    "guide.section.before": "먼저 필요한 것", "guide.section.when": "이 화면을 사용할 때", "guide.section.outcome": "확인할 수 있는 것",
+    "guide.overview.before": "읽기 전용으로 연 Store 분석이 완료되어야 합니다.", "guide.overview.when": "Store 종류와 증거 규모를 먼저 파악하고 다음 조사 화면을 정할 때 사용합니다.", "guide.overview.outcome": "파일·목적지·구독·Advisory 관찰량과 분석 한계를 한눈에 확인합니다.", "guide.overview.caution": "요약 수치는 관찰된 증거이며 현재 브로커 상태나 원인을 판정하지 않습니다.",
+    "guide.compare.before": "비교할 Store 또는 시점이 다른 스냅샷을 두 개 이상 열어야 합니다.", "guide.compare.when": "재기동·장애조치 전후처럼 두 사본에서 무엇이 달라졌는지 확인할 때 사용합니다.", "guide.compare.outcome": "목적지, 구독, 메시지 ID, 트랜잭션 및 파일 크기의 관찰 차이를 얻습니다.", "guide.compare.caution": "차이는 시점 간 관찰값일 뿐 사건의 전후 관계나 원인을 증명하지 않습니다.",
+    "guide.case.before": "현재 Store에서 목적지·메시지·증거 연결·파일 중 하나를 선택하거나 아래 검색 목록에서 고를 수 있습니다.", "guide.case.when": "가설, 검토 메모와 근거를 한 Store 단위로 묶어 재검토하거나 전달할 때 사용합니다.", "guide.case.outcome": "Store 서명과 의미 키가 포함된 고정 증거와 미해결 참조 상태를 남깁니다.", "guide.case.caution": "케이스와 고정 증거는 현재 Store에만 속하며 다른 Store의 근거와 자동 합쳐지지 않습니다.",
+    "guide.journals.before": "Store 안에 journal 파일과 지원되는 구조화 레코드가 있어야 합니다.", "guide.journals.when": "어떤 journal이 보존되어 있고 그 안의 증거 참조를 파일별로 좁힐 때 사용합니다.", "guide.journals.outcome": "파일별 offset 범위, 레코드 수, 목적지와 증거 참조를 확인합니다.", "guide.journals.caution": "파일명과 offset은 같은 journal 안의 순서 근거이며 서로 다른 journal의 전역 시간 순서가 아닙니다.",
+    "guide.timeline.before": "지원되는 구조화 journal 레코드가 분석 결과에 포함되어야 합니다.", "guide.timeline.when": "같은 journal 안에서 ADD, ACK/remove, 트랜잭션, 구독 증거의 위치 순서를 볼 때 사용합니다.", "guide.timeline.outcome": "journal별 offset 순서와 각 레코드의 목적지·ID·상태를 얻습니다.", "guide.timeline.caution": "서로 다른 journal 사이의 전역 시간 순서는 만들지 않습니다.",
+    "guide.export.before": "내보낼 Store 분석과 필요한 경우 현재 Store의 조사 케이스를 준비합니다.", "guide.export.when": "민감 값을 가린 오프라인 증거 묶음을 검토자에게 전달할 때 사용합니다.", "guide.export.outcome": "JSON, HTML, manifest와 체크섬이 포함된 ZIP을 만듭니다.", "guide.export.caution": "내보내기 전에 마스킹 범위를 검토해야 하며 원본 Store 자체는 묶음에 포함하지 않습니다.",
+    "guide.destinations.before": "Store 분석에서 목적지 이름이 파싱되거나 원문에서 관찰되어야 합니다.", "guide.destinations.when": "어떤 Queue·Topic 이름이 어느 파일에서 발견됐는지 좁힐 때 사용합니다.", "guide.destinations.outcome": "목적지 유형, 이름, 출처 파일, 관찰 횟수와 신뢰 수준을 확인합니다.", "guide.destinations.caution": "이름이 보였다는 사실은 목적지가 현재 브로커에 존재한다는 증명이 아닙니다.",
+    "guide.subscriptions.before": "구독 키 또는 Consumer 형태의 ID가 Store 증거에서 관찰되어야 합니다.", "guide.subscriptions.when": "durable subscription이나 Consumer 후보와 연관 목적지를 찾을 때 사용합니다.", "guide.subscriptions.outcome": "연결·세션·Consumer 후보와 출처 파일을 확인합니다.", "guide.subscriptions.caution": "패턴 후보는 배포된 브로커 상태나 실제 활성 Consumer를 확정하지 않습니다.",
+    "guide.messages.before": "Store 분석을 완료합니다. 최초 2,500건 이후에는 원본 Store 접근 권한이 있어야 다음 묶음을 불러올 수 있습니다.", "guide.messages.when": "목적지·JMSMessageID·journal·offset으로 메시지 후보를 찾고 상세 문자열과 HEX를 볼 때 사용합니다.", "guide.messages.outcome": "지원 범위의 메시지 후보를 필터·정렬·페이지 이동하고 필요하면 끝까지 이어 읽습니다.", "guide.messages.caution": "후보 레코드는 완전한 JMS 메시지나 현재 pending 상태를 뜻하지 않을 수 있습니다.",
+    "guide.trace.before": "정확한 JMSMessageID가 필요합니다. 여러 Store를 비교하려면 해당 Store 탭도 열어 두어야 합니다.", "guide.trace.when": "한 Message ID의 ADD, ACK/remove, 트랜잭션 및 raw 관찰을 한 흐름에서 찾을 때 사용합니다.", "guide.trace.outcome": "Store별·journal별 증거와 offset, 관련 목적지, ACK 관찰 여부를 확인합니다.", "guide.trace.caution": "반복 ADD는 중복 전달을, ACK 부재는 미승인을, 전체 결과는 장애 원인을 자동으로 증명하지 않습니다.",
+    "guide.evidence.before": "구조화 레코드 또는 raw 후보에서 공통 ID·목적지·트랜잭션 키가 관찰되어야 합니다.", "guide.evidence.when": "어떤 원본 레코드들이 같은 메시지·구독·트랜잭션·Advisory 관계로 묶였는지 확인할 때 사용합니다.", "guide.evidence.outcome": "연결 유형, 공통 식별자, 출처 journal과 구성 증거 참조를 확인합니다.", "guide.evidence.caution": "연결은 지원되는 키의 일치 결과이며 인과관계나 장애 원인 판정이 아닙니다.",
+    "guide.files.before": "Store 디렉터리 읽기와 파일 인벤토리 분석이 완료되어야 합니다.", "guide.files.when": "journal·index·state 파일의 상대경로와 크기, 수정 시각을 확인할 때 사용합니다.", "guide.files.outcome": "파일 유형과 메타데이터, 해당 파일에서 관찰된 관련 메시지 후보를 확인합니다.", "guide.files.caution": "수정 시각은 파일 메타데이터이며 개별 메시지 발생 시각으로 해석하지 않습니다.",
     "guide.limit": "화살표는 화면에서 확인할 순서를 안내할 뿐, 사건의 시간 순서나 원인 관계를 뜻하지 않습니다.",
     "guide.overview.source": "열린 저장소 스냅샷",
     "guide.overview.inspect": "요약 지표와 관찰값",
@@ -51,6 +64,7 @@ const messages: Record<Locale, Record<string, string>> = {
     "guide.files.source": "저장소 파일 목록",
     "guide.files.inspect": "파일 유형·크기 분류",
     "guide.files.detail": "연결된 관찰값 확인",
+    "guide.trace.source": "정확한 JMSMessageID와 검색 범위", "guide.trace.inspect": "Store별 ADD·ACK·트랜잭션 증거", "guide.trace.detail": "journal·offset 확인 및 케이스 선택",
     "nav.compare": "스냅샷 비교",
     "view.compare.title": "스냅샷 A/B 비교",
     "view.compare.desc": "두 저장소 스냅샷에서 직접 관찰된 항목의 차이를 비교합니다.",
@@ -292,7 +306,7 @@ const messages: Record<Locale, Record<string, string>> = {
     "overview.destination": "목적지",
     "overview.relatedJournal": "관련 저널",
     "warning.strings": "원문 문자열 목록은 화면 성능을 위해 {count}건까지만 보관했습니다.",
-    "warning.messages": "메시지 후보 목록은 화면 성능을 위해 {count}건까지만 보관했습니다.",
+    "warning.messages": "메시지 후보를 우선 {count}건 불러왔습니다. 원본 Store가 연결되어 있으면 메시지 화면에서 다음 묶음을 이어서 불러올 수 있습니다.",
     "warning.unknownStore": "저장소 유형을 확정하지 않았습니다. 파일 목록과 원문 문자열을 직접 확인하세요.",
     "filter.destination": "목적지 또는 파일명으로 찾기",
     "filter.subscription": "구독자 ID, 연결 ID 또는 목적지로 찾기",
@@ -416,7 +430,86 @@ const messages: Record<Locale, Record<string, string>> = {
     "source.destination.why": "목적지 유형과 실제 이름 해석을 확인합니다.",
     "source.cursor.why": "미전달 메시지가 어떤 cursor에 보관되는지 확인합니다.",
     "source.queueTopic.why": "선택 목적지의 Broker-side 전달 경로를 확인합니다."
+    ,"nav.trace": "메시지 추적"
+    ,"view.trace.title": "메시지 추적"
+    ,"view.trace.desc": "하나의 JMSMessageID와 연결된 지원 범위 내 Store 증거를 Store·journal별로 추적합니다."
     ,"nav.evidence": "증거 연결"
+    ,"messages.loaded": "메시지 후보 {count}건을 불러왔습니다."
+    ,"messages.moreAvailable": "아직 관찰되지 않은 후보가 있습니다. 다음 묶음은 원본 Store를 읽기 전용으로 다시 훑어 확장합니다."
+    ,"messages.reopenRequired": "이어 읽으려면 원본 Store를 다시 열어 읽기 권한을 부여해 주세요. 캐시된 결과는 그대로 유지됩니다."
+    ,"messages.loadMore": "다음 {count}건 불러오기"
+    ,"messages.loading": "이어 읽는 중 {percent}%"
+    ,"messages.allLoaded": "지원되는 메시지 후보 {count}건을 모두 불러왔습니다."
+    ,"table.pagination": "페이지 이동"
+    ,"table.goToPage": "페이지"
+    ,"table.go": "이동"
+    ,"table.pageOf": "{page} / {pages} 페이지"
+    ,"case.removePin": "고정 증거 제거"
+    ,"case.removeNote": "조사 메모 삭제"
+    ,"export.trace": "메시지 추적 포함"
+    ,"export.traceBody": "정확한 JMSMessageID를 입력하면 현재 Store의 추적 요약을 같은 Evidence Bundle에 포함합니다. 식별자 마스킹을 켜면 중앙 비식별 처리에서 Message ID도 함께 가립니다."
+    ,"evidence.relationship": "무엇이 연결됐는지"
+    ,"evidence.relationship.messageAck": "동일 ID의 ADD ↔ ACK/remove"
+    ,"evidence.relationship.messageRecord": "동일 ID의 메시지 레코드"
+    ,"evidence.relationship.transaction": "트랜잭션 ID ↔ 명령 레코드"
+    ,"evidence.relationship.subscription": "구독 키 ↔ 목적지"
+    ,"evidence.relationship.advisory": "Advisory 목적지 ↔ 원본 레코드"
+    ,"evidence.map.source": "출발 증거"
+    ,"evidence.map.record": "파싱 레코드·원문 후보"
+    ,"evidence.map.key": "공통 키"
+    ,"evidence.map.identity": "메시지 ID·구독 키·TX ID"
+    ,"evidence.map.result": "관계 결과"
+    ,"evidence.map.related": "메시지·ACK·구독·트랜잭션"
+    ,"trace.kicker": "정확한 JMSMessageID 일치"
+    ,"trace.title": "메시지 추적"
+    ,"trace.description": "한 Message ID에 연결된 지원 범위의 Store 증거를 찾습니다. 대소문자와 전체 문자열이 정확히 일치해야 합니다."
+    ,"trace.messageId": "JMSMessageID"
+    ,"trace.action": "추적"
+    ,"trace.thisMessage": "이 메시지 추적"
+    ,"trace.invalid": "앞뒤 공백을 제외한 정확한 JMSMessageID를 입력해 주세요. 공백이 포함된 값이나 부분 문자열은 검색하지 않습니다."
+    ,"trace.selectStore": "검색할 Store를 하나 이상 선택해 주세요."
+    ,"trace.scope": "검색 범위"
+    ,"trace.scope.current": "현재 Store"
+    ,"trace.scope.all": "열린 모든 Store"
+    ,"trace.scope.selected": "Store 직접 선택"
+    ,"trace.result": "관찰된 증거"
+    ,"trace.resultFor": "추적: {id}"
+    ,"trace.add": "ADD 레코드"
+    ,"trace.ack": "ACK/remove 레코드"
+    ,"trace.transactions": "트랜잭션"
+    ,"trace.journals": "Journal"
+    ,"trace.stores": "Store/스냅샷"
+    ,"trace.repeatedAdd": "동일 Message ID를 참조하는 ADD 증거가 {count}건 관찰되었습니다."
+    ,"trace.repeatedAddLimit": "여러 ADD 관찰만으로 Consumer 중복 전달을 증명하지는 않습니다."
+    ,"trace.ackObserved": "ACK/remove 증거가 관찰되었습니다."
+    ,"trace.noAck": "스캔한 증거에서 ACK/remove를 찾지 못했습니다."
+    ,"trace.noAckLimit": "메시지가 승인되지 않았다는 증명은 아닙니다."
+    ,"trace.questions": "이 증거로 확인해 볼 수 있는 질문"
+    ,"trace.question.persisted": "같은 Message ID가 한 번보다 많이 저장된 증거가 있는가?"
+    ,"trace.question.ack": "ACK/remove 증거가 존재하는가?"
+    ,"trace.question.transaction": "메시지가 트랜잭션과 연결되어 있는가?"
+    ,"trace.question.journals": "어느 journal 파일에 이 Message ID의 증거가 있는가?"
+    ,"trace.question.snapshots": "두 Store 스냅샷 사이에서 관찰 증거가 달라지는가?"
+    ,"trace.observed": "Store별 분리 결과"
+    ,"trace.sequence": "증거 순서"
+    ,"trace.perJournalOrder": "이 journal 안의 offset 순서"
+    ,"trace.transaction": "트랜잭션"
+    ,"trace.selectForCase": "케이스에서 선택"
+    ,"trace.none": "일치하는 증거가 없습니다."
+    ,"trace.noneBody": "선택한 Store 범위에서 정확히 같은 JMSMessageID를 찾지 못했습니다. 이는 사건이 없었다는 증명이 아닙니다."
+    ,"trace.notProve": "이 추적으로 증명할 수 없는 것"
+    ,"trace.limit.no-duplicate-delivery-proof": "Consumer에 중복 전달되었다는 사실"
+    ,"trace.limit.no-application-processing-proof": "애플리케이션 처리가 성공했다는 사실"
+    ,"trace.limit.no-current-broker-state": "브로커의 현재 Queue 상태"
+    ,"trace.limit.no-redelivery-cause": "재전달의 정확한 원인"
+    ,"trace.limit.no-root-cause": "장애의 근본 원인"
+    ,"trace.type.ADD": "ADD"
+    ,"trace.type.ACK_REMOVE": "ACK / REMOVE"
+    ,"trace.type.TRANSACTION": "TRANSACTION"
+    ,"trace.type.SUBSCRIPTION_RELATED": "구독 관련"
+    ,"trace.type.DESTINATION_RELATED": "목적지 관련"
+    ,"trace.type.RAW_OBSERVATION": "원문 관찰"
+    ,"trace.type.UNKNOWN": "확인 불가"
     ,"view.evidence.title": "증거 연결"
     ,"view.evidence.desc": "구조화 레코드와 원문 증거를 메시지, 구독, 트랜잭션 및 Advisory 관계로 연결합니다."
     ,"filter.evidence": "ID, 목적지, 파일 또는 트랜잭션으로 찾기"
@@ -464,6 +557,19 @@ const messages: Record<Locale, Record<string, string>> = {
     "guide.open": "How to use this view",
     "guide.title": "View guide",
     "guide.description": "A basic path for reading evidence in this view.",
+    "guide.section.before": "Before you start", "guide.section.when": "Use this view when", "guide.section.outcome": "What you can obtain",
+    "guide.overview.before": "Finish opening and analyzing a Store in read-only mode.", "guide.overview.when": "Use it first to understand the Store layout and decide where to investigate next.", "guide.overview.outcome": "Review file, destination, subscription, Advisory observation totals, and analysis limits.", "guide.overview.caution": "Summary counts are observed evidence, not a determination of current broker state or root cause.",
+    "guide.compare.before": "Open at least two Store copies or snapshots from different points in time.", "guide.compare.when": "Use it to see what changed across copies, such as before and after restart or failover.", "guide.compare.outcome": "Compare observed destinations, subscriptions, message IDs, transactions, and file sizes.", "guide.compare.caution": "A difference is not proof of event order or causation.",
+    "guide.case.before": "Select a destination, message, evidence link, or file in the current Store, or choose one in the picker below.", "guide.case.when": "Use it to keep a hypothesis, notes, and evidence together for one Store.", "guide.case.outcome": "Save evidence references with a Store signature, semantic key, provenance, and unresolved state.", "guide.case.caution": "Cases and pins belong to the current Store and are not silently merged with another Store.",
+    "guide.journals.before": "The Store must contain journal files and supported structured records.", "guide.journals.when": "Use it to narrow retained evidence to a particular journal file.", "guide.journals.outcome": "Review offset ranges, record counts, destinations, and evidence references per file.", "guide.journals.caution": "Filename and offset order is authoritative only within the same journal, not as global chronology.",
+    "guide.timeline.before": "Supported structured journal records must be present in the analysis.", "guide.timeline.when": "Use it to inspect the offset order of ADD, ACK/remove, transaction, and subscription evidence within a journal.", "guide.timeline.outcome": "See per-journal offset order with each record's destination, ID, and status.", "guide.timeline.caution": "No global time order is fabricated between different journals.",
+    "guide.export.before": "Prepare the Store analysis and, if needed, an investigation case for the current Store.", "guide.export.when": "Use it to hand off a redacted offline evidence bundle.", "guide.export.outcome": "Create a ZIP containing JSON, HTML, a manifest, and checksums.", "guide.export.caution": "Review redaction choices first; the original Store is never included in the bundle.",
+    "guide.destinations.before": "Destination names must have been parsed or observed in the Store.", "guide.destinations.when": "Use it to locate Queue or Topic names and their source files.", "guide.destinations.outcome": "Review type, name, source, occurrence count, and evidence confidence.", "guide.destinations.caution": "An observed name does not prove that a destination currently exists on the broker.",
+    "guide.subscriptions.before": "A subscription key or Consumer-shaped ID must be observed in Store evidence.", "guide.subscriptions.when": "Use it to find durable-subscription or Consumer candidates and related destinations.", "guide.subscriptions.outcome": "Review connection, session, Consumer candidates, and source files.", "guide.subscriptions.caution": "Pattern candidates do not establish a currently active Consumer or deployed broker state.",
+    "guide.messages.before": "Finish Store analysis. Loading beyond the initial 2,500 candidates requires access to the original Store.", "guide.messages.when": "Use it to find candidates by destination, JMSMessageID, journal, or offset and inspect strings and HEX.", "guide.messages.outcome": "Filter, sort, jump between pages, and explicitly load supported candidates to the end.", "guide.messages.caution": "A candidate is not necessarily a complete JMS message or current pending state.",
+    "guide.trace.before": "Have the exact JMSMessageID. Open additional Store tabs first if you want a multi-Store comparison.", "guide.trace.when": "Use it to collect supported ADD, ACK/remove, transaction, and raw observations for one Message ID.", "guide.trace.outcome": "Review Store- and journal-separated evidence, offsets, destinations, and ACK observations.", "guide.trace.caution": "Repeated ADD does not prove duplicate delivery, missing ACK does not prove no acknowledgement, and the trace does not determine root cause.",
+    "guide.evidence.before": "Structured or raw evidence must share a supported ID, destination, or transaction key.", "guide.evidence.when": "Use it to understand which source records were linked as one message, subscription, transaction, or Advisory relation.", "guide.evidence.outcome": "Review relationship type, shared identity, source journal, and contributing evidence references.", "guide.evidence.caution": "A supported-key match is not causation or an outage diagnosis.",
+    "guide.files.before": "Complete Store directory inventory and analysis.", "guide.files.when": "Use it to review relative paths, sizes, and modified times for journal, index, and state files.", "guide.files.outcome": "Review file classification, metadata, and related observed message candidates.", "guide.files.caution": "A file modified time is metadata, not the event time of an individual message.",
     "guide.limit": "Arrows show a reading path in the UI; they do not assert event order or causality.",
     "guide.overview.source": "Open Store snapshot",
     "guide.overview.inspect": "Summary metrics and observations",
@@ -498,6 +604,7 @@ const messages: Record<Locale, Record<string, string>> = {
     "guide.files.source": "Store file inventory",
     "guide.files.inspect": "File type and size classification",
     "guide.files.detail": "Review linked observations",
+    "guide.trace.source": "Exact JMSMessageID and search scope", "guide.trace.inspect": "ADD, ACK, and transaction evidence per Store", "guide.trace.detail": "Review journal offsets and select for a case",
     "nav.compare": "Snapshot compare",
     "view.compare.title": "Snapshot A/B comparison",
     "view.compare.desc": "Compare differences directly observed in two store snapshots.",
@@ -739,7 +846,7 @@ const messages: Record<Locale, Record<string, string>> = {
     "overview.destination": "Destination",
     "overview.relatedJournal": "Related journal",
     "warning.strings": "Only the first {count} printable strings are retained for display performance.",
-    "warning.messages": "Only the first {count} message candidates are retained for display performance.",
+    "warning.messages": "The first {count} message candidates are loaded initially. Continue from the Messages view while the original Store is available.",
     "warning.unknownStore": "The store type was not determined. Review the file list and raw strings directly.",
     "filter.destination": "Filter by destination or filename",
     "filter.subscription": "Filter by consumer ID, connection, or destination",
@@ -775,7 +882,86 @@ const messages: Record<Locale, Record<string, string>> = {
     "help.confidence.title": "Evidence level", "help.confidence.body": "Observed values exist in the file. Parsed values follow a known format. Pattern matches and inferences require further verification.",
     "help.cursor.title": "File-backed pending cursor", "help.cursor.body": "A structure that stores undelivered messages in files. Confirm the owning subscription in the deployed product source.",
     "source.advisorySupport.why": "Check how the advisory destination name is created.", "source.destinationInfo.why": "Check the Temporary Destination command and operationType.", "source.advisoryBroker.why": "Check where the advisory payload is emitted after a state change.", "source.topicSubscription.why": "Check when topic messages enter the pending cursor.", "source.destination.why": "Check destination type and physical-name decoding.", "source.cursor.why": "Check which cursor retains undelivered messages.", "source.queueTopic.why": "Check the broker-side dispatch path for the selected destination."
+    ,"nav.trace": "Trace a Message"
+    ,"view.trace.title": "Trace a Message"
+    ,"view.trace.desc": "Trace supported Store evidence associated with one exact JMSMessageID, separated by Store and journal."
     ,"nav.evidence": "Evidence links"
+    ,"messages.loaded": "Loaded {count} message candidates."
+    ,"messages.moreAvailable": "More candidates remain. The next batch explicitly re-reads the original Store in read-only mode."
+    ,"messages.reopenRequired": "Reopen the original Store to continue loading. Cached analysis remains available."
+    ,"messages.loadMore": "Load next {count}"
+    ,"messages.loading": "Loading more {percent}%"
+    ,"messages.allLoaded": "Loaded all {count} supported message candidates."
+    ,"table.pagination": "Pagination"
+    ,"table.goToPage": "Page"
+    ,"table.go": "Go"
+    ,"table.pageOf": "Page {page} of {pages}"
+    ,"case.removePin": "Remove pinned evidence"
+    ,"case.removeNote": "Delete investigation note"
+    ,"export.trace": "Include Message Trace"
+    ,"export.traceBody": "Enter an exact JMSMessageID to include this Store's trace in the Evidence Bundle. Identifier redaction sanitizes the Message ID through the same central policy."
+    ,"evidence.relationship": "What is connected"
+    ,"evidence.relationship.messageAck": "ADD ↔ ACK/remove for the same ID"
+    ,"evidence.relationship.messageRecord": "Message records with the same ID"
+    ,"evidence.relationship.transaction": "Transaction ID ↔ command records"
+    ,"evidence.relationship.subscription": "Subscription key ↔ destination"
+    ,"evidence.relationship.advisory": "Advisory destination ↔ source record"
+    ,"evidence.map.source": "Source evidence"
+    ,"evidence.map.record": "Parsed record or raw candidate"
+    ,"evidence.map.key": "Shared key"
+    ,"evidence.map.identity": "Message ID, subscription key, or TX ID"
+    ,"evidence.map.result": "Relationship"
+    ,"evidence.map.related": "Message, ACK, subscription, or transaction"
+    ,"trace.kicker": "Exact JMSMessageID match"
+    ,"trace.title": "Trace a Message"
+    ,"trace.description": "Find supported Store evidence associated with one Message ID. The entire value and case must match exactly."
+    ,"trace.messageId": "JMSMessageID"
+    ,"trace.action": "Trace"
+    ,"trace.thisMessage": "Trace this message"
+    ,"trace.invalid": "Enter one exact JMSMessageID after trimming surrounding whitespace. Values containing whitespace and partial values are not searched."
+    ,"trace.selectStore": "Select at least one Store to search."
+    ,"trace.scope": "Search scope"
+    ,"trace.scope.current": "Current Store"
+    ,"trace.scope.all": "All Open Stores"
+    ,"trace.scope.selected": "Select Stores"
+    ,"trace.result": "Observed evidence"
+    ,"trace.resultFor": "Trace: {id}"
+    ,"trace.add": "ADD records"
+    ,"trace.ack": "ACK/remove records"
+    ,"trace.transactions": "Transactions"
+    ,"trace.journals": "Journals"
+    ,"trace.stores": "Stores/Snapshots"
+    ,"trace.repeatedAdd": "{count} ADD records reference this Message ID."
+    ,"trace.repeatedAddLimit": "Multiple ADD observations do not by themselves prove duplicate delivery to a consumer."
+    ,"trace.ackObserved": "ACK/remove evidence observed."
+    ,"trace.noAck": "No ACK/remove evidence was found within the scanned evidence."
+    ,"trace.noAckLimit": "This does not prove that the message was never acknowledged."
+    ,"trace.questions": "Questions this evidence can help investigate"
+    ,"trace.question.persisted": "Was the same Message ID persisted more than once?"
+    ,"trace.question.ack": "Is ACK/remove evidence present?"
+    ,"trace.question.transaction": "Was the message associated with a transaction?"
+    ,"trace.question.journals": "Which journal files contain evidence for this Message ID?"
+    ,"trace.question.snapshots": "Does the evidence differ between two Store snapshots?"
+    ,"trace.observed": "Results separated by Store"
+    ,"trace.sequence": "Evidence sequence"
+    ,"trace.perJournalOrder": "Offset order within this journal"
+    ,"trace.transaction": "Transaction"
+    ,"trace.selectForCase": "Select for case"
+    ,"trace.none": "No matching evidence found"
+    ,"trace.noneBody": "No exact JMSMessageID match was found in the selected Store scope. This does not prove that the event never occurred."
+    ,"trace.notProve": "What this does NOT prove"
+    ,"trace.limit.no-duplicate-delivery-proof": "Duplicate delivery to a consumer"
+    ,"trace.limit.no-application-processing-proof": "Successful application processing"
+    ,"trace.limit.no-current-broker-state": "The broker's current queue state"
+    ,"trace.limit.no-redelivery-cause": "The exact cause of a redelivery"
+    ,"trace.limit.no-root-cause": "The root cause of an incident"
+    ,"trace.type.ADD": "ADD"
+    ,"trace.type.ACK_REMOVE": "ACK / REMOVE"
+    ,"trace.type.TRANSACTION": "TRANSACTION"
+    ,"trace.type.SUBSCRIPTION_RELATED": "Subscription related"
+    ,"trace.type.DESTINATION_RELATED": "Destination related"
+    ,"trace.type.RAW_OBSERVATION": "Raw observation"
+    ,"trace.type.UNKNOWN": "Unknown"
     ,"view.evidence.title": "Evidence links"
     ,"view.evidence.desc": "Follow structured records and raw evidence across messages, subscriptions, transactions, and Advisories."
     ,"filter.evidence": "Find by ID, destination, file, or transaction"

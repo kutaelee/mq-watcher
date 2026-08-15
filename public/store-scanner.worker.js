@@ -3,7 +3,7 @@ import { parseKahaDbJournalFile, summarizeStructuredJournals } from "./kahadb-jo
 import { correlateEvidence } from "./evidence-correlation.js";
 const CHUNK_SIZE = 4 * 1024 * 1024;
 const MAX_STRINGS = 6000;
-const MAX_MESSAGES = 2500;
+export const DEFAULT_MESSAGE_LIMIT = 2500;
 const MAX_STRING_LENGTH = 2048;
 let cancelled = false;
 const workerScope = typeof self !== "undefined" ? self : null;
@@ -128,7 +128,10 @@ function parseConsumerId(raw) {
   };
 }
 
-export async function scanDirectory({ signature, directoryName, files }, emit = (message) => workerScope?.postMessage(message)) {
+export async function scanDirectory({ signature, directoryName, files, messageLimit = DEFAULT_MESSAGE_LIMIT }, emit = (message) => workerScope?.postMessage(message)) {
+  const effectiveMessageLimit = Number.isFinite(messageLimit)
+    ? Math.max(DEFAULT_MESSAGE_LIMIT, Math.floor(messageLimit))
+    : DEFAULT_MESSAGE_LIMIT;
   const store = detectStore(files);
   const totalBytes = files.reduce((sum, entry) => sum + entry.file.size, 0);
   let scannedBytes = 0;
@@ -245,7 +248,7 @@ export async function scanDirectory({ signature, directoryName, files }, emit = 
 
         if (advisory) {
           advisoryRecords += 1;
-          if (messages.length < MAX_MESSAGES) {
+          if (messages.length < effectiveMessageLimit) {
             const local = Math.max(0, Math.min(chunkBytes.length - 1, offset - chunkStart));
             const previewStart = Math.max(0, local - 96);
             const previewEnd = Math.min(chunkBytes.length, local + 320);
@@ -367,7 +370,7 @@ export async function scanDirectory({ signature, directoryName, files }, emit = 
   });
   const warnings = [];
   if (stringsTruncated) warnings.push(`문자열 목록은 ${MAX_STRINGS.toLocaleString()}건까지만 보관했습니다.`);
-  if (messagesTruncated) warnings.push(`메시지 후보는 ${MAX_MESSAGES.toLocaleString()}건까지만 보관했습니다.`);
+  if (messagesTruncated) warnings.push(`메시지 후보 ${effectiveMessageLimit.toLocaleString()}건을 불러왔습니다. 원본 Store가 연결되어 있으면 메시지 화면에서 다음 묶음을 이어서 불러올 수 있습니다.`);
   if (store.kind === "Unknown Store Layout") {
     warnings.push("Store 유형을 확정하지 않았습니다. 파일 목록과 Raw 문자열을 직접 확인하세요.");
   }

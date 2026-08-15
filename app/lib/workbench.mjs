@@ -189,8 +189,8 @@ export function buildSnapshotDiff(left, right) {
 
 export const LEAD_THRESHOLDS = Object.freeze({ advisoryObservations: 10, unknownRecords: 5, journalConcentrationPercent: 60, journalConcentrationMinimum: 10 });
 
-export function createIncidentCase(now = new Date().toISOString(), id = `case-${Date.now().toString(36)}`) {
-  return { id, title: "", hypothesis: "", notes: [], pins: [], createdAt: now, updatedAt: now };
+export function createIncidentCase(now = new Date().toISOString(), id = `case-${Date.now().toString(36)}`, storeSignature = "", storeName = "") {
+  return { id, storeSignature, storeName, title: "", hypothesis: "", notes: [], pins: [], createdAt: now, updatedAt: now };
 }
 
 export function addCasePin(incident, pin, now = new Date().toISOString()) {
@@ -202,6 +202,122 @@ export function addCaseNote(incident, text, now = new Date().toISOString(), id =
   const trimmed = String(text).trim();
   if (!trimmed) return incident;
   return { ...incident, notes: [...incident.notes, { id, text: trimmed, createdAt: now }], updatedAt: now };
+}
+
+export function removeCasePin(incident, target, now = new Date().toISOString()) {
+  const samePin = (pin) => typeof target === "string"
+    ? pin.semanticKey === target
+    : pin.storeSignature === target.storeSignature
+      && pin.semanticKey === target.semanticKey
+      && pin.provenance?.file === target.provenance?.file
+      && pin.provenance?.offset === target.provenance?.offset;
+  return { ...incident, pins: incident.pins.filter((pin) => !samePin(pin)), updatedAt: now };
+}
+
+export function removeCaseNote(incident, noteId, now = new Date().toISOString()) {
+  return { ...incident, notes: incident.notes.filter((note) => note.id !== noteId), updatedAt: now };
+}
+
+export function scopeIncidentCases(cases, storeSignature) {
+  return (cases ?? []).map((incident) => {
+    const pins = (incident.pins ?? []).map((pin) => ({
+      ...pin,
+      semanticKey: pin.semanticKey ?? `legacy:${pin.id}`,
+      provenance: pin.provenance ?? { file: pin.file ?? "", offset: pin.offset ?? null },
+    }));
+    const scopedSignature = incident.storeSignature ?? pins[0]?.storeSignature ?? "";
+    return { ...incident, storeSignature: scopedSignature, storeName: incident.storeName ?? pins[0]?.storeName ?? "", pins: storeSignature ? pins.filter((pin) => pin.storeSignature === storeSignature) : pins };
+  }).filter((incident) => !storeSignature || incident.storeSignature === storeSignature).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+}
+
+export function normalizeMessageId(value) {
+  const trimmed = String(value ?? "").trim();
+  if (trimmed.length < 3 || trimmed.length > 512 || /[\s\p{Cc}]/u.test(trimmed)) return "";
+  return trimmed;
+}
+
+function containsExactObservedId(value, messageId) {
+  const isConservativeBoundary = (character) => !character || /[\s=,;()[\]{}"'<>]/u.test(character);
+  let from = 0;
+  while (from <= value.length) {
+    const index = value.indexOf(messageId, from);
+    if (index < 0) return false;
+    const before = index > 0 ? value[index - 1] : "";
+    const after = value[index + messageId.length] ?? "";
+    if (isConservativeBoundary(before) && isConservativeBoundary(after)) return true;
+    from = index + 1;
+  }
+  return false;
+}
+
+function traceEvidenceType(record) {
+  if (/AddMessage|ADD_MESSAGE/i.test(record.command)) return "ADD";
+  if (/RemoveMessage|REMOVE_MESSAGE|Ack/i.test(record.command)) return "ACK_REMOVE";
+  if (/Transaction|Commit|Rollback|Prepare|COMMIT_COMMAND|ROLLBACK_COMMAND|PREPARE_COMMAND/i.test(record.command) || record.transactionId) return "TRANSACTION";
+  if (/Subscription/i.test(record.command) || record.subscriptionKey) return "SUBSCRIPTION_RELATED";
+  return "UNKNOWN";
+}
+
+export function traceMessageEvidence(results, requestedMessageId) {
+  const messageId = normalizeMessageId(requestedMessageId);
+  if (!messageId) return null;
+  const storeRefs = [];
+  for (const result of results ?? []) {
+    if (!result?.signature) continue;
+    const evidence = [];
+    const seen = new Set();
+    const transactions = new Set();
+    const add = (item) => {
+      if (seen.has(item.evidenceRef)) return;
+      seen.add(item.evidenceRef);
+      evidence.push(item);
+    };
+    for (const record of result.structured?.records ?? []) {
+      if (record.messageId !== messageId) continue;
+      if (record.transactionId) transactions.add(record.transactionId);
+      add({
+        evidenceType: traceEvidenceType(record), messageId,
+        destination: record.destination?.name, transactionId: record.transactionId,
+        sourceFile: record.file, offset: record.location?.offset, recordId: `parsed:${record.file}:${record.location?.offset ?? -1}`,
+        confidence: record.confidence ?? "Unknown", snapshotLabel: result.directoryName,
+        evidenceRef: `parsed:${record.file}:${record.location?.offset ?? -1}`,
+      });
+    }
+    for (const record of result.structured?.records ?? []) {
+      if (!record.transactionId || !transactions.has(record.transactionId) || record.messageId === messageId) continue;
+      add({
+        evidenceType: "TRANSACTION", messageId, destination: record.destination?.name, transactionId: record.transactionId,
+        sourceFile: record.file, offset: record.location?.offset, recordId: `parsed:${record.file}:${record.location?.offset ?? -1}`,
+        confidence: record.confidence ?? "Unknown", snapshotLabel: result.directoryName,
+        evidenceRef: `transaction:${record.file}:${record.location?.offset ?? -1}`,
+      });
+    }
+    for (const candidate of result.messages ?? []) {
+      if (candidate.relatedId !== messageId) continue;
+      add({ evidenceType: "RAW_OBSERVATION", messageId, destination: candidate.destination, sourceFile: candidate.journal, offset: candidate.offset, confidence: candidate.confidence ?? "Observed", snapshotLabel: result.directoryName, evidenceRef: `candidate:${candidate.id}` });
+    }
+    for (const raw of result.strings ?? []) {
+      if (!containsExactObservedId(raw.value, messageId)) continue;
+      add({ evidenceType: "RAW_OBSERVATION", messageId, sourceFile: raw.file, offset: raw.offset, confidence: raw.confidence ?? "Observed", snapshotLabel: result.directoryName, evidenceRef: `raw:${raw.id}` });
+    }
+    evidence.sort((a, b) => a.sourceFile.localeCompare(b.sourceFile) || (a.offset ?? Number.MAX_SAFE_INTEGER) - (b.offset ?? Number.MAX_SAFE_INTEGER) || a.evidenceRef.localeCompare(b.evidenceRef));
+    storeRefs.push({ storeSignature: result.signature, storeName: result.directoryName, evidence });
+  }
+  const all = storeRefs.flatMap((store) => store.evidence);
+  return {
+    messageId,
+    storeRefs,
+    summary: {
+      totalEvidence: all.length,
+      addRecords: all.filter((item) => item.evidenceType === "ADD").length,
+      ackRemoveRecords: all.filter((item) => item.evidenceType === "ACK_REMOVE").length,
+      transactionRecords: all.filter((item) => item.evidenceType === "TRANSACTION").length,
+      destinationCount: new Set(all.map((item) => item.destination).filter(Boolean)).size,
+      journalCount: new Set(storeRefs.flatMap((store) => store.evidence.map((item) => `${store.storeSignature}:${item.sourceFile}`))).size,
+      snapshotCount: storeRefs.filter((store) => store.evidence.length).length,
+    },
+    interpretationLimits: ["no-duplicate-delivery-proof", "no-application-processing-proof", "no-current-broker-state", "no-redelivery-cause", "no-root-cause"],
+  };
 }
 
 export function buildInvestigativeLeads(result, thresholds = LEAD_THRESHOLDS) {
@@ -402,7 +518,7 @@ function bundleReport(payload, locale) {
   return `<!doctype html><html lang="${ko ? "ko" : "en"}"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>MQ Watcher Evidence Bundle</title><style>body{font:14px system-ui;margin:32px;color:#172033}h1{font-size:24px}p{color:#526079;line-height:1.6}.card{border:1px solid #dfe5ef;border-radius:10px;padding:16px;margin:14px 0}table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:8px;border-bottom:1px solid #e5e9f0;text-align:left}code{font-family:Consolas,monospace}</style><h1>MQ Watcher Evidence Bundle</h1><p>${ko ? "이 보고서는 읽기 전용 분석에서 파생된 메타데이터입니다. 현재 브로커 상태나 자동 원인 판정을 나타내지 않습니다." : "This report contains metadata derived by read-only analysis. It does not assert current broker state or an automated root cause."}</p><div class="card"><strong>${ko ? "저장소" : "Store"}</strong><p>${htmlEscape(payload.store.directoryName)} · ${htmlEscape(payload.store.storeKind)}</p><code>${htmlEscape(payload.store.signature)}</code></div><h2>${ko ? "증거 순서" : "Evidence order"}</h2><p>${ko ? "파일 ID와 오프셋 순서이며 기록 시각이 아닙니다." : "Ordered by file ID and offset; this is not event time."}</p><table><thead><tr><th>File</th><th>Offset</th><th>Command</th><th>Destination</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></html>`;
 }
 
-export async function buildEvidenceBundle({ result, incidentCase = null, comparison = [], locale = "en", redaction = {}, generatedAt = new Date().toISOString() }) {
+export async function buildEvidenceBundle({ result, incidentCase = null, comparison = [], messageTrace = null, locale = "en", redaction = {}, generatedAt = new Date().toISOString() }) {
   const redactor = makeRedactor({ identifiers: Boolean(redaction.identifiers), destinations: Boolean(redaction.destinations), filePaths: Boolean(redaction.filePaths) });
   const caseValue = incidentCase ? { ...incidentCase, notes: redaction.notes ? [] : incidentCase.notes } : null;
   const rawPayload = {
@@ -418,6 +534,7 @@ export async function buildEvidenceBundle({ result, incidentCase = null, compari
     timeline: buildEvidenceTimeline(result),
     comparison,
     incidentCase: caseValue,
+    messageTrace,
   };
   const payload = redactor.visit(rawPayload);
   const evidence = stableStringify(payload);
