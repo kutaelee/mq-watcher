@@ -28,7 +28,7 @@ Workbench sessions, cached analysis, cases, language, and UI state are stored by
 
 When the UI opens, the local server requests metadata only from the fixed latest-release endpoint for this repository. The request identifies the MQ Watcher version in its user agent. It does not include selected Store paths, Store names, source bytes, cached analysis, incident notes, or exported evidence.
 
-Release assets are downloaded only after the user clicks **Verify and update**. The in-place replacement path is enabled only for the Windows x64 portable executable. Source, npm, Linux, unsupported architecture, draft, pre-release, downgrade, and incomplete-asset cases do not perform automatic replacement.
+Release assets are downloaded only after the user clicks **Verify, replace, and restart**. The in-place replacement path is enabled only for the Windows x64 portable executable. It replaces the exact executable that launched the current server, keeps the same filename and directory, and does not create a second EXE. Source, npm, Linux, unsupported architecture, draft, pre-release, downgrade, and incomplete-asset cases do not perform automatic replacement.
 
 The supported Windows replacement flow:
 
@@ -41,6 +41,8 @@ The supported Windows replacement flow:
 7. launches a narrowly scoped replacement helper, verifies the staged checksum again, swaps the executable, and smoke-checks the expected version;
 8. restarts the verified new executable, or restores and restarts the previous executable when the replacement/version check fails;
 9. removes task-owned staged, helper, and backup files on success, cancellation, or handled failure.
+
+After the install request is accepted, the browser waits for the replacement process to answer with the target version and then reloads the page. If that reconnect cannot be verified within the bounded wait, the UI tells the user to run the same original `mq-watcher.exe` path again; there is no separate updated filename to locate. The running version is also shown beside the MQ Watcher brand and remains available through `mq-watcher.exe --version`.
 
 This is a supply-chain boundary, not code signing. Windows binaries are currently unsigned, so users should verify `SHA256SUMS.txt` and may still see a Windows SmartScreen warning. A compromised repository release or GitHub account is outside the guarantee provided by checksum verification against metadata from the same release channel.
 

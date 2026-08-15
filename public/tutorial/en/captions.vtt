@@ -1,0 +1,25 @@
+WEBVTT
+
+00:00:00.350 --> 00:00:13.430
+Prepare consistent Store copies from before the incident and the investigation point.
+Each Store stays in its own tab.
+
+00:00:14.130 --> 00:00:25.370
+Compare snapshots first. The increase to 161 Advisory observations narrows the changed area,
+but does not prove the cause.
+
+00:00:26.070 --> 00:00:37.470
+Use Journal retention to locate the files and offsets behind the change.
+Offset order is authoritative only within the same journal.
+
+00:00:38.170 --> 00:00:53.530
+Trace one exact JMSMessageID across supported ADD, ACK/remove,
+transaction, and raw observations.
+
+00:00:54.230 --> 00:01:04.670
+Send only the selected observation to an Incident Case,
+then pin it with its Store signature and provenance.
+
+00:01:05.370 --> 00:01:17.330
+Review every export and redaction option.
+The evidence bundle excludes the original Store and does not determine root cause.

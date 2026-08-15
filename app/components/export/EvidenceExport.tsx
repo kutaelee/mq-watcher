@@ -11,12 +11,12 @@ import { Badge, Button, Card } from "../ui";
 
 type SessionOption = { id: string; name: string; result: ScanResult | null };
 
-export function EvidenceExport({ result, sessions }: { result: ScanResult; sessions: SessionOption[] }) {
+export function EvidenceExport({ result, sessions, tutorialCase = null, tutorialTraceId = "" }: { result: ScanResult; sessions: SessionOption[]; tutorialCase?: IncidentCase | null; tutorialTraceId?: string }) {
   const { t, locale } = useI18n();
-  const [cases, setCases] = useState<IncidentCase[]>([]);
-  const [caseId, setCaseId] = useState("");
-  const [compareId, setCompareId] = useState("");
-  const [traceId, setTraceId] = useState("");
+  const [cases, setCases] = useState<IncidentCase[]>(() => tutorialCase ? [tutorialCase] : []);
+  const [caseId, setCaseId] = useState(() => tutorialCase?.id ?? "");
+  const [compareId, setCompareId] = useState(() => tutorialCase ? sessions.find((session) => session.result && session.result.signature !== result.signature)?.id ?? "" : "");
+  const [traceId, setTraceId] = useState(() => tutorialTraceId);
   const [traceError, setTraceError] = useState("");
   const [redaction, setRedaction] = useState({ identifiers: true, destinations: false, filePaths: true, notes: false });
   const [building, setBuilding] = useState(false);
@@ -29,11 +29,13 @@ export function EvidenceExport({ result, sessions }: { result: ScanResult; sessi
   }));
   useEffect(() => {
     lifecycle.activate();
-    readIncidentCases(result.signature).then((values) => { if (lifecycle.mounted) setCases(values); }).catch(() => undefined);
+    if (!tutorialCase) {
+      readIncidentCases(result.signature).then((values) => { if (lifecycle.mounted) setCases(values); }).catch(() => undefined);
+    }
     return () => {
       lifecycle.dispose();
     };
-  }, [lifecycle, result.signature]);
+  }, [lifecycle, result.signature, tutorialCase]);
   const alternatives = sessions.filter((session) => session.result && session.result.signature !== result.signature);
 
   const download = () => {

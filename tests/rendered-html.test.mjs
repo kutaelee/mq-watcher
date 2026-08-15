@@ -20,6 +20,9 @@ test("server-renders the MQ Watcher read-only explorer", async () => {
   const html = await response.text();
   assert.match(html, /<title>MQ Watcher<\/title>/i);
   assert.match(html, /STORE EVIDENCE EXPLORER/);
+  assert.match(html, /MQ Watcher <span class="brand-version">v(?:<!-- -->)?0\.4\.0<\/span>/);
+  assert.match(html, /Incident tutorial/);
+  assert.match(html, /Annotate this screen/);
   assert.match(html, /Explore ActiveMQ store evidence in one place/);
   assert.match(html, /Open store folder/);
   assert.match(html, /Source protection/);
@@ -29,11 +32,13 @@ test("server-renders the MQ Watcher read-only explorer", async () => {
 });
 
 test("ships the bounded worker scanner, localized UI, and sortable tables", async () => {
-  const [worker, correlation, explorer, evidenceExport, layout] = await Promise.all([
+  const [worker, correlation, explorer, evidenceExport, updatePanel, updateRoute, layout] = await Promise.all([
     readFile(new URL("../public/store-scanner.worker.js", import.meta.url), "utf8"),
     readFile(new URL("../public/evidence-correlation.js", import.meta.url), "utf8"),
     readFile(new URL("../app/components/StoreExplorer.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/export/EvidenceExport.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/UpdatePanel.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/update/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
   ]);
 
@@ -57,6 +62,12 @@ test("ships the bounded worker scanner, localized UI, and sortable tables", asyn
   assert.match(explorer, /EvidenceView/);
   assert.match(explorer, /resolveEvidenceRef/);
   assert.match(explorer, /demo-scenario\.json/);
+  assert.match(explorer, /ScreenTour/);
+  assert.match(explorer, /applyTutorialStep/);
+  assert.match(updatePanel, /waitForUpdatedServer/);
+  assert.match(updatePanel, /같은 \{executable\}/);
+  assert.match(updatePanel, /does not create a second EXE/);
+  assert.match(updateRoute, /path\.basename\(runtime\.executable\)/);
   assert.doesNotMatch(explorer, /InvestigationView|ClassesView|mobile-menu/);
   assert.match(layout, /<html lang="en">/);
   await access(new URL("../public/store-scanner.worker.js", import.meta.url));
@@ -113,7 +124,6 @@ test("ships OSS safety guidance, broker fixture provenance, and portable release
 
   const featureScreenshots = [
     "scenario-overview.png",
-    "view-guide.png",
     "snapshot-compare.png",
     "incident-case.png",
     "journal-progressive.png",
@@ -132,6 +142,9 @@ test("ships OSS safety guidance, broker fixture provenance, and portable release
     }
     await access(new URL(`../docs/media/${locale}/mq-watcher-walkthrough.mp4`, import.meta.url));
     await access(new URL(`../docs/media/${locale}/mq-watcher-walkthrough.gif`, import.meta.url));
+    await access(new URL(`../public/tutorial/${locale}/mq-watcher-walkthrough.mp4`, import.meta.url));
+    await access(new URL(`../public/tutorial/${locale}/scenario-overview.png`, import.meta.url));
+    await access(new URL(`../public/tutorial/${locale}/captions.vtt`, import.meta.url));
   }
   await access(new URL("../docs/user-guide.md", import.meta.url));
   await access(new URL("../docs/user-guide.ko.md", import.meta.url));

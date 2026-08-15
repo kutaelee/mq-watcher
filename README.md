@@ -20,7 +20,7 @@ This is an independent open-source tool. It is not affiliated with or supported 
 
 ## Guided tour
 
-The walkthrough below uses only the committed synthetic Advisory scenario. It shows the investigation flow without customer data or a connection to a broker.
+The walkthrough below uses only the committed synthetic Advisory scenario. It shows the investigation flow without customer data or a connection to a broker. The 1080p MP4 includes local narration and burned-in subtitles; the GIF is a short silent preview.
 
 ![MQ Watcher English walkthrough](docs/media/en/mq-watcher-walkthrough.gif)
 
@@ -30,7 +30,7 @@ The walkthrough below uses only the committed synthetic Advisory scenario. It sh
 | --- | --- |
 | ![Snapshot comparison with synthetic evidence](docs/screenshots/en/snapshot-compare.png) | ![Incident case with selectable evidence](docs/screenshots/en/incident-case.png) |
 
-Each analysis page includes **How to use this view**, a three-step visual reading path, and an explicit statement of what the page does not prove.
+Use **Annotate this screen** on any analysis page to highlight its actual controls in place. View-specific steps cover direct page jumps, progressive message and journal loading, case evidence selection, Message Trace scope, and export trace options where they apply. **Incident tutorial** opens the committed synthetic snapshots, plays the localized walkthrough, and then drives the live UI through overview, snapshot compare, journal retention, Message Trace, Incident Case, and Evidence Export.
 
 ## What it is
 
@@ -89,9 +89,9 @@ The executable starts a server bound only to `http://127.0.0.1:38921` and opens 
 
 ### Updates
 
-When the UI opens, MQ Watcher checks the repository's fixed GitHub Releases API endpoint for the latest stable version. This metadata request sends the application version in its user agent; it does not send Store paths, names, file bytes, cached analysis, or case notes. It does not download release assets until the user selects **Verify and update**.
+When the UI opens, MQ Watcher checks the repository's fixed GitHub Releases API endpoint for the latest stable version. This metadata request sends the application version in its user agent; it does not send Store paths, names, file bytes, cached analysis, or case notes. It does not download release assets until the user selects **Verify, replace, and restart**.
 
-Automatic replacement is supported only by the Windows x64 portable executable. Source, npm, Linux, unsupported architecture, draft, pre-release, downgrade, or incomplete release-asset cases remain manual or blocked. Before replacement, the updater restricts release and redirect locations, checks declared sizes, verifies `SHA256SUMS.txt` and release SHA-256 metadata, stages the file beside the current executable, smoke-checks its version, and rolls back on replacement failure. See [Portable release and updater](docs/portable-release.md) for the exact boundary and current validation status.
+Automatic replacement is supported only by the Windows x64 portable executable. It replaces the `mq-watcher.exe` that is currently running in the same folder; it does not create a second, differently named EXE. After replacement it automatically starts that same filename, and the UI waits for the new version to answer before reloading. If that reconnect cannot be verified, run the same `mq-watcher.exe` again. Source, npm, Linux, unsupported architecture, draft, pre-release, downgrade, or incomplete release-asset cases remain manual or blocked. See [Portable release and updater](docs/portable-release.md) for the exact boundary.
 
 Linux users can extract `mq-watcher-linux-x64.tar.gz` and run `./mq-watcher`.
 
@@ -144,9 +144,9 @@ The structured byte rules and official source links are documented in [Structure
 
 All screenshots and videos use the committed synthetic fixture. They contain no customer or operating data. See the [complete English feature guide](docs/user-guide.md) for page-by-page instructions and examples.
 
-| Journal references with progressive loading | Visual page guide |
+| Journal references with progressive loading | Trace one Message ID |
 | --- | --- |
-| ![Journal reference detail with 150 of 160 references loaded](docs/screenshots/en/journal-progressive.png) | ![Three-step visual guide for the overview](docs/screenshots/en/view-guide.png) |
+| ![Journal reference detail with 150 of 160 references loaded](docs/screenshots/en/journal-progressive.png) | ![Message evidence separated by Store and journal](docs/screenshots/en/message-trace.png) |
 
 ## Example workflow
 

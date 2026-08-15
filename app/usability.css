@@ -9,10 +9,7 @@
 .case-pin-trace { padding: 5px 7px; color: var(--primary-strong); background: var(--primary-soft); font-size: 8px; }
 .case-notes > div { display: flex; align-items: flex-start; gap: 8px; }
 .case-notes > div > span { min-width: 0; flex: 1; }
-.view-guide-context { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }
-.view-guide-context section { padding: 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel-soft); }
-.view-guide-context strong { display: block; margin-bottom: 6px; color: var(--primary-strong); font-size: 10px; }
-.view-guide-context p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.55; }
+.update-replace-note { display: block; margin-top: 7px; padding: 8px; border-radius: 7px; background: var(--primary-soft); color: var(--muted); line-height: 1.55; }
 .page-navigator { display: flex; align-items: center; justify-content: flex-end; gap: 7px; flex-wrap: wrap; }
 .page-numbers { display: flex; align-items: center; gap: 3px; }
 .page-numbers > span { display: flex; align-items: center; gap: 3px; }
@@ -83,7 +80,6 @@
 .export-trace-option .export-trace-error { color: var(--red); font-weight: 650; }
 
 @media (max-width: 900px) {
-  .view-guide-context { grid-template-columns: 1fr; }
   .trace-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .trace-evidence-row { grid-template-columns: 72px minmax(0, 1fr); }
   .trace-evidence-row > :nth-child(3), .trace-evidence-row > :nth-child(4) { grid-column: 2; }

@@ -6,11 +6,13 @@ This guide uses the committed `synthetic-advisory-baseline` and `synthetic-advis
 
 Start MQ Watcher and choose **Load synthetic demo**. A first-time workspace starts in English. A language change is saved in browser-local storage, as are cached analyses and incident cases. The portable executable uses the stable loopback origin `http://127.0.0.1:38921`, so this state is available after an executable restart. `--port 0` intentionally creates an ephemeral origin.
 
-## Visual help on every page
+## In-place screen annotations and incident tutorial
 
-Select **How to use this view** beside a page title. The guide explains prerequisites, when the page is useful, what evidence it can produce, a three-step reading path, and the page-specific interpretation boundary. Its arrows do not assert event order or causality.
+Select **Annotate this screen** beside a page title. The application dims the rest of the UI and points directly to that view's actual controls. Each annotation explains the prerequisite, when the view is useful, what it can provide, and what it does not prove. Views add their own action steps for direct page jumps, progressive message or journal loading, case evidence selection, Message Trace scope, and export trace options.
 
-![Three-step overview guide](screenshots/en/view-guide.png)
+![The Messages guide highlighting its progressive-loading status](screenshots/en/view-guide.png)
+
+Select **Incident tutorial** in the header for a localized video and a live six-step exercise. MQ Watcher loads the committed baseline and investigation snapshots, then moves through Overview → Snapshot Compare → Journal Retention → Message Trace → Incident Case → Evidence Export. Nothing in the tutorial is customer data or an automatic diagnosis.
 
 ## 1. Overview
 

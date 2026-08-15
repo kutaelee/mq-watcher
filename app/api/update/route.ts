@@ -1,4 +1,5 @@
 import packageMetadata from "../../../package.json";
+import path from "node:path";
 import {
   authorizeInstallRequest,
   checkForUpdate,
@@ -60,7 +61,7 @@ export async function GET(request: Request) {
       mode: runtime.mode,
       signal: request.signal,
     });
-    return json({ ...publicCheck(update), installToken: INSTALL_TOKEN });
+    return json({ ...publicCheck(update), installToken: INSTALL_TOKEN, executableName: runtime.executable ? path.basename(runtime.executable) : null });
   } catch (error) {
     return json({ status: "error", error: safeError(error) }, 502);
   }
@@ -93,7 +94,7 @@ export async function POST(request: Request) {
       currentExecutable: runtime.executable,
       signal: request.signal,
     });
-    return json(result, 202);
+    return json({ ...result, executableName: path.basename(runtime.executable) }, 202);
   } catch (error) {
     const safe = safeError(error);
     return json({ status: safe.code === "cancelled" ? "cancelled" : "error", error: safe }, safe.code === "cancelled" ? 408 : 502);

@@ -10,20 +10,21 @@ import { Badge, Button, Card } from "../ui";
 
 type PinCandidate = Omit<CasePin, "pinnedAt">;
 
-export function IncidentCase({ result, pinCandidate, pinCandidates, onTrace }: { result: ScanResult; pinCandidate: PinCandidate | null; pinCandidates: PinCandidate[]; onTrace: (messageId: string) => void }) {
+export function IncidentCase({ result, pinCandidate, pinCandidates, tutorialCase = null, onTrace }: { result: ScanResult; pinCandidate: PinCandidate | null; pinCandidates: PinCandidate[]; tutorialCase?: IncidentCaseValue | null; onTrace: (messageId: string) => void }) {
   const { t } = useI18n();
-  const [cases, setCases] = useState<IncidentCaseValue[]>([]);
-  const [activeId, setActiveId] = useState("");
+  const [cases, setCases] = useState<IncidentCaseValue[]>(() => tutorialCase ? [tutorialCase] : []);
+  const [activeId, setActiveId] = useState(() => tutorialCase?.id ?? "");
   const [note, setNote] = useState("");
   const [pinQuery, setPinQuery] = useState("");
   const [selectedCandidate, setSelectedCandidate] = useState<PinCandidate | null>(pinCandidate);
 
   useEffect(() => {
+    if (tutorialCase) return;
     readIncidentCases(result.signature).then((values) => {
       setCases(values);
       setActiveId(values[0]?.id ?? "");
     }).catch(() => undefined);
-  }, [result.signature]);
+  }, [result.signature, tutorialCase]);
 
   const active = cases.find((item) => item.id === activeId) ?? null;
   const effectiveSelectedCandidate = selectedCandidate ?? pinCandidate;
@@ -31,7 +32,7 @@ export function IncidentCase({ result, pinCandidate, pinCandidates, onTrace }: {
   const persist = (next: IncidentCaseValue) => {
     setCases((current) => [next, ...current.filter((item) => item.id !== next.id)]);
     setActiveId(next.id);
-    writeIncidentCase(next).catch(() => undefined);
+    if (!tutorialCase) writeIncidentCase(next).catch(() => undefined);
   };
   const createCase = () => persist(createIncidentCase(new Date().toISOString(), `case-${Date.now().toString(36)}`, result.signature, result.directoryName));
   const removeCase = async () => {

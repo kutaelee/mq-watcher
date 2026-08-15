@@ -672,6 +672,108 @@ const inspectJournalStoreIsolationExpression = `(${async function inspectJournal
   throw new Error(`journal state leaked across Store tabs; expanded=${expanded}, reset=${document.querySelectorAll(".journal-refs > div").length}`);
 }})()`;
 
+const verifyAnnotatedGuideExpression = `(${async function verifyAnnotatedGuide() {
+  const deadline = Date.now() + 10_000;
+  const guide = document.querySelector(".view-guide-button");
+  if (!guide) throw new Error("screen annotation action is unavailable");
+  guide.click();
+  while (Date.now() < deadline && !document.querySelector(".screen-tour-callout")) await new Promise((resolve) => setTimeout(resolve, 50));
+  const firstTarget = document.querySelector(".screen-tour-highlight")?.getBoundingClientRect();
+  const firstTitle = document.querySelector(".screen-tour-callout h2")?.textContent?.trim() ?? "";
+  const next = document.querySelector(".screen-tour-actions .primary");
+  if (!firstTarget?.width || !firstTitle || !next) throw new Error("the guide did not annotate an actual screen element");
+  next.click();
+  while (Date.now() < deadline) {
+    const secondTitle = document.querySelector(".screen-tour-callout h2")?.textContent?.trim() ?? "";
+    if (secondTitle && secondTitle !== firstTitle) {
+      document.querySelector(".screen-tour-head button")?.click();
+      return { firstTitle, secondTitle, highlighted: true };
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error("the screen annotation did not advance to the next actual element");
+}})()`;
+
+const verifyActionableGuidesExpression = `(${async function verifyActionableGuides() {
+  const cases = [
+    { labels: ["메시지", "Messages"], title: /2,500/u, target: ".message-load-more, .best-effort" },
+    { labels: ["저널 보존 탐색", "Journal retention"], title: /역색인 참조|reverse-index references/iu, target: ".journal-reference-head" },
+    { labels: ["조사 케이스", "Incident case"], title: /케이스를 만든 뒤|Create a case/iu, target: ".case-list" },
+    { labels: ["메시지 추적", "Trace a Message"], title: /Store 범위|Store search scope/iu, target: ".trace-scope" },
+    { labels: ["증거 번들 내보내기", "Evidence bundle"], title: /Message Trace/iu, target: ".export-trace-option" },
+  ];
+  const results = [];
+  for (const item of cases) {
+    const deadline = Date.now() + 15_000;
+    const navigation = Array.from(document.querySelectorAll(".nav-item")).find((button) => item.labels.includes(button.querySelector("span")?.textContent?.trim() ?? ""));
+    if (!navigation) throw new Error(`missing guide navigation: ${item.labels.join("/")}`);
+    navigation.click();
+    while (Date.now() < deadline && !navigation.classList.contains("active")) await new Promise((resolve) => setTimeout(resolve, 50));
+    const guide = document.querySelector(".view-guide-button");
+    if (!guide) throw new Error(`missing guide action: ${item.labels[0]}`);
+    guide.click();
+    while (Date.now() < deadline && !document.querySelector(".screen-tour-callout")) await new Promise((resolve) => setTimeout(resolve, 50));
+    let matched = false;
+    for (let step = 0; step < 12 && Date.now() < deadline; step += 1) {
+      const title = document.querySelector(".screen-tour-callout h2")?.textContent?.trim() ?? "";
+      if (item.title.test(title)) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        const target = document.querySelector(item.target)?.getBoundingClientRect();
+        const highlight = document.querySelector(".screen-tour-highlight")?.getBoundingClientRect();
+        if (!target?.width || !highlight?.width) throw new Error(`guide target was not highlighted: ${title}`);
+        const overlapWidth = Math.max(0, Math.min(highlight.right, target.right) - Math.max(highlight.left, target.left));
+        const overlapHeight = Math.max(0, Math.min(highlight.bottom, target.bottom) - Math.max(highlight.top, target.top));
+        const overlapRatio = (overlapWidth * overlapHeight) / Math.max(1, target.width * target.height);
+        if (overlapRatio < 0.5) throw new Error(`guide highlight missed its control: ${title} (${overlapRatio.toFixed(2)})`);
+        document.querySelector(".screen-tour-head button")?.click();
+        results.push({ view: item.labels[0], title });
+        matched = true;
+        break;
+      }
+      const previousTitle = title;
+      document.querySelector(".screen-tour-actions .primary")?.click();
+      while (Date.now() < deadline) {
+        const nextTitle = document.querySelector(".screen-tour-callout h2")?.textContent?.trim() ?? "";
+        if (!nextTitle || nextTitle !== previousTitle) break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    }
+    if (!matched) throw new Error(`actionable guide step was not found: ${item.labels[0]}`);
+  }
+  return results;
+}})()`;
+
+const verifySyntheticTutorialExpression = `(${async function verifySyntheticTutorial() {
+  const deadline = Date.now() + 15_000;
+  document.querySelector(".tutorial-button")?.click();
+  while (Date.now() < deadline && !document.querySelector(".tutorial-preview video")) await new Promise((resolve) => setTimeout(resolve, 50));
+  const video = document.querySelector(".tutorial-preview video");
+  const track = video?.querySelector("track[kind='captions']");
+  const start = document.querySelector(".dialog-actions .button-primary") ?? document.querySelector(".dialog-actions button:last-child");
+  if (!video?.querySelector("source") || !track || !start) throw new Error("the tutorial preview video or localized captions are unavailable");
+  start.click();
+  while (Date.now() < deadline && !document.querySelector(".screen-tour-callout")) await new Promise((resolve) => setTimeout(resolve, 50));
+  const views = [];
+  for (let index = 0; index < 6; index += 1) {
+    let title = "";
+    let activeView = "";
+    let highlight;
+    while (Date.now() < deadline) {
+      title = document.querySelector(".screen-tour-callout h2")?.textContent?.trim() ?? "";
+      activeView = document.querySelector(".nav-item.active")?.textContent?.trim() ?? "";
+      highlight = document.querySelector(".screen-tour-highlight")?.getBoundingClientRect();
+      if (title && activeView && highlight?.width) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    if (!title || !activeView || !highlight?.width) throw new Error(`tutorial step ${index + 1} is not attached to the actual workspace`);
+    views.push(activeView);
+    document.querySelector(".screen-tour-actions .primary")?.click();
+    await new Promise((resolve) => setTimeout(resolve, 80));
+  }
+  if (document.querySelector(".screen-tour-callout")) throw new Error("the tutorial did not finish after six steps");
+  return { views, video: true, captions: true };
+}})()`;
+
 function waitForExit(child, timeoutMilliseconds) {
   if (!child || child.exitCode !== null) return Promise.resolve(true);
   return new Promise((resolve) => {
@@ -857,6 +959,16 @@ async function main() {
     assert.match(await evaluate(client, rejectInvalidExportTraceExpression), /정확한 JMSMessageID|exact JMSMessageID/u);
     const isolatedJournal = await evaluate(client, inspectJournalStoreIsolationExpression);
     assert.deepEqual(isolatedJournal, { expanded: 150, reset: 19 });
+    const annotatedGuide = await evaluate(client, verifyAnnotatedGuideExpression);
+    assert.equal(annotatedGuide.highlighted, true);
+    assert.notEqual(annotatedGuide.firstTitle, annotatedGuide.secondTitle);
+    const actionableGuides = await evaluate(client, verifyActionableGuidesExpression);
+    assert.equal(actionableGuides.length, 5, "five workflow-specific guides must highlight their real controls");
+    const tutorial = await evaluate(client, verifySyntheticTutorialExpression);
+    assert.equal(tutorial.video, true);
+    assert.equal(tutorial.captions, true);
+    assert.equal(tutorial.views.length, 6);
+    assert.equal(new Set(tutorial.views).size, 6, "the tutorial must move through six distinct investigation views");
 
     const overlay = await evaluate(client, "Boolean(document.querySelector('[data-nextjs-dialog], .vite-error-overlay, #webpack-dev-server-client-overlay'))");
     assert.equal(overlay, false, "the application must not show a framework error overlay");
@@ -915,6 +1027,9 @@ async function main() {
       "a trace occurrence opened its owning Store case, preserved the selection, and pinned one semantic reference",
       "Evidence Export blocked an invalid non-empty Message ID with a visible error",
       "Journal selection and progressive reference count reset between Store tabs",
+      "the screen guide annotated and advanced across actual UI elements",
+      "message loading, journal references, case selection, trace scope, and export trace guides highlighted their actual controls",
+      "the localized video tutorial drove six distinct views over the synthetic incident data",
       "application rendered without browser errors",
     ],
     cleanup,

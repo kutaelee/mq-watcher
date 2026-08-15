@@ -11,6 +11,8 @@ const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 const defaultExecutable = path.join(repositoryRoot, "outputs", process.platform === "win32" ? "mq-watcher.exe" : "mq-watcher");
 const executable = path.resolve(process.argv[2] || defaultExecutable);
 const previousExecutable = process.argv[3] ? path.resolve(process.argv[3]) : null;
+const stablePort = Number(process.env.MQ_WATCHER_SMOKE_STABLE_PORT || 38921);
+if (!Number.isInteger(stablePort) || stablePort < 1024 || stablePort > 65_535) throw new Error("MQ_WATCHER_SMOKE_STABLE_PORT must be a valid non-privileged port");
 const taskChildren = new Set();
 
 function waitForExit(child, timeoutMs) {
@@ -169,9 +171,10 @@ try {
   assert.equal(existsSync(extraFile), false);
 
   const server = await smokeServer(executable, environment);
-  const stableFirst = await smokeServer(executable, environment, ["--no-open"]);
-  const stableSecond = await smokeServer(executable, environment, ["--no-open"]);
-  assert.equal(stableFirst.url, "http://127.0.0.1:38921");
+  const stableArguments = stablePort === 38921 ? ["--no-open"] : ["--no-open", "--port", String(stablePort)];
+  const stableFirst = await smokeServer(executable, environment, stableArguments);
+  const stableSecond = await smokeServer(executable, environment, stableArguments);
+  assert.equal(stableFirst.url, `http://127.0.0.1:${stablePort}`);
   assert.equal(stableSecond.url, stableFirst.url, "Portable restarts must preserve the browser origin");
   const cacheEntries = await readdir(path.dirname(cache));
   assert.equal(cacheEntries.some((entry) => /\.(tmp|lock|invalid|stale)$/.test(entry)), false);

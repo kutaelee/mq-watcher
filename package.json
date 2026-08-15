@@ -31,7 +31,7 @@
   },
   "scripts": {
     "dev": "vinext dev",
-    "build": "vinext build",
+    "build": "npm run prepare:tutorial && vinext build",
     "build:portable": "npm run build && node scripts/build-portable.mjs",
     "test:portable-cache": "node --test tests/portable-cache.test.mjs",
     "test:portable": "node scripts/smoke-portable.mjs",
@@ -43,7 +43,9 @@
     "test:broker-fixtures": "node --test tests/broker-fixtures.test.mjs",
     "fixtures:generate": "node scripts/generate-synthetic-fixtures.mjs",
     "demo:generate": "node scripts/generate-demo-scenario.mjs",
+    "docs:capture-tutorial": "node scripts/capture-tutorial-scenes.mjs",
     "docs:media": "node scripts/build-doc-media.mjs",
+    "prepare:tutorial": "node scripts/sync-tutorial-media.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "validate:store": "node scripts/validate-store.mjs",
     "prepack": "npm run build"

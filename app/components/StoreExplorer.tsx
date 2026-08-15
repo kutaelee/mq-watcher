@@ -32,6 +32,7 @@ import {
   OctagonX,
   PanelRightClose,
   PanelRightOpen,
+  PlayCircle,
   Plus,
   Search,
   ShieldCheck,
@@ -51,7 +52,7 @@ import {
 } from "react";
 import { I18nProvider, useI18n, type Locale } from "@/app/lib/i18n";
 import { enqueueScanCacheWrite, readScanCache, readWorkbenchState, writeScanCache, writeWorkbenchState } from "@/app/lib/scan-cache";
-import { buildStoreSignatureInWorker, closeSession, findReusableSession, MAX_STORE_SESSIONS, restoreSessions, sessionId, SessionResourceLedger, SignatureReservationRegistry } from "@/app/lib/workbench.mjs";
+import { addCasePin, buildStoreSignatureInWorker, closeSession, createIncidentCase, findReusableSession, MAX_STORE_SESSIONS, restoreSessions, sessionId, SessionResourceLedger, SignatureReservationRegistry } from "@/app/lib/workbench.mjs";
 import type {
   CasePin,
   Confidence,
@@ -59,6 +60,7 @@ import type {
   EvidenceLink,
   EvidenceRef,
   FileInput,
+  IncidentCase as IncidentCaseValue,
   MessageCandidate,
   ScanFile,
   ScanResult,
@@ -89,6 +91,7 @@ import { EvidenceExport } from "./export/EvidenceExport";
 import { UpdatePanel } from "./UpdatePanel";
 import { PageNavigator } from "./PageNavigator";
 import { MessageTrace } from "./trace/MessageTrace";
+import { ScreenTour, type ScreenTourStep } from "./ScreenTour";
 
 type ViewId = "overview" | "compare" | "case" | "journals" | "timeline" | "export" | "destinations" | "subscriptions" | "messages" | "trace" | "evidence" | "files";
 
@@ -301,25 +304,6 @@ function buildPinCandidates(result: ScanResult): PinCandidate[] {
   });
 }
 
-function ViewGuideDialog({ view, open, onOpenChange }: { view: ViewId; open: boolean; onOpenChange: (open: boolean) => void }) {
-  const { t } = useI18n();
-  const ViewIcon = NAVIGATION.find((item) => item.id === view)?.icon ?? FileSearch;
-  const nodes = [
-    { icon: HardDrive, label: t(`guide.${view}.source`) },
-    { icon: ViewIcon, label: t(`guide.${view}.inspect`) },
-    { icon: PanelRightOpen, label: t(`guide.${view}.detail`) },
-  ];
-  return <Dialog open={open} onOpenChange={onOpenChange} title={`${t(`view.${view}.title`)} · ${t("guide.title")}`} description={t(`view.${view}.desc`)}>
-    <div className="view-guide-context">
-      <section><strong>{t("guide.section.before")}</strong><p>{t(`guide.${view}.before`)}</p></section>
-      <section><strong>{t("guide.section.when")}</strong><p>{t(`guide.${view}.when`)}</p></section>
-      <section><strong>{t("guide.section.outcome")}</strong><p>{t(`guide.${view}.outcome`)}</p></section>
-    </div>
-    <div className="view-guide-flow">{nodes.map(({ icon: Icon, label }, index) => <Fragment key={label}><div className="view-guide-node"><span>{index + 1}</span><Icon size={22} /><strong>{label}</strong></div>{index < nodes.length - 1 ? <ChevronRight className="view-guide-arrow" size={22} /> : null}</Fragment>)}</div>
-    <div className="best-effort view-guide-limit"><Info size={15} /><span>{t(`guide.${view}.caution`)}</span></div>
-  </Dialog>;
-}
-
 async function collectDirectoryFiles(handle: FileSystemDirectoryHandle, signal?: AbortSignal) {
   const collected: FileInput[] = [];
   async function walk(directory: FileSystemDirectoryHandle, prefix: string) {
@@ -339,11 +323,11 @@ async function collectDirectoryFiles(handle: FileSystemDirectoryHandle, signal?:
   return collected;
 }
 
-export default function StoreExplorer() {
-  return <I18nProvider><ExplorerApp /></I18nProvider>;
+export default function StoreExplorer({ version }: { version: string }) {
+  return <I18nProvider><ExplorerApp version={version} /></I18nProvider>;
 }
 
-function ExplorerApp() {
+function ExplorerApp({ version }: { version: string }) {
   const { t, locale, setLocale } = useI18n();
   const help = useMemo(() => makeHelp(t), [t]);
   const [sessions, setSessions] = useState<StoreSession[]>([]);
@@ -353,7 +337,9 @@ function ExplorerApp() {
   const [isPreparing, setIsPreparing] = useState(false);
   const [error, setError] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
-  const [guideOpen, setGuideOpen] = useState(false);
+  const [guideStep, setGuideStep] = useState<number | null>(null);
+  const [tutorialStep, setTutorialStep] = useState<number | null>(null);
+  const [tutorialIntro, setTutorialIntro] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [toast, setToast] = useState("");
   const [detailOpen, setDetailOpen] = useState(true);
@@ -372,6 +358,60 @@ function ExplorerApp() {
   const selected = activeSession?.selected ?? null;
   const progress = activeSession?.progress ?? EMPTY_PROGRESS;
   const isScanning = activeSession?.status === "scanning";
+  const selectedPinCandidate = useMemo(() => makePinCandidate(selected, result), [result, selected]);
+  const tutorialIncidentCase = useMemo<IncidentCaseValue | null>(() => {
+    if (tutorialStep === null || tutorialStep < 4 || !result || !selectedPinCandidate) return null;
+    const timestamp = "2026-08-14T10:30:00.000Z";
+    const incident = {
+      ...createIncidentCase(timestamp, `tutorial-${result.signature.slice(-12)}`, result.signature, result.directoryName),
+      title: t("tutorial.case.title"),
+      hypothesis: t("tutorial.case.hypothesis"),
+    };
+    return addCasePin(incident, selectedPinCandidate, timestamp) as IncidentCaseValue;
+  }, [result, selectedPinCandidate, t, tutorialStep]);
+
+  const guidePrimaryTargets: Record<ViewId, string> = {
+    overview: ".metric-grid", compare: ".compare-picker", case: ".case-list", journals: ".journal-layout > .view-stack .table-card", timeline: ".timeline-toolbar", export: ".export-layout > .export-card:last-child",
+    destinations: ".filter-bar", subscriptions: ".filter-bar", messages: ".filter-bar", trace: ".trace-input", evidence: ".filter-bar", files: ".filter-bar",
+  };
+  const guideSecondaryTargets: Record<ViewId, string> = {
+    overview: ".overview-grid", compare: ".table-card tbody tr:first-child", case: ".case-layout", journals: ".journal-detail", timeline: ".timeline-card", export: ".export-actions",
+    destinations: ".table-card tbody tr:first-child", subscriptions: ".table-card tbody tr:first-child", messages: ".table-card tbody tr:first-child", trace: ".trace-summary, .trace-empty", evidence: ".table-card tbody tr:first-child", files: ".table-card tbody tr:first-child",
+  };
+  const guideSteps: ScreenTourStep[] = [
+    { target: "[data-tour='source']", eyebrow: t("guide.section.before"), title: t("source.label"), body: t(`guide.${activeView}.before`) },
+    { target: "[data-tour='navigation']", eyebrow: t("guide.section.when"), title: t("tour.navigation.title"), body: t(`guide.${activeView}.when`) },
+    { target: "[data-tour='heading']", eyebrow: t("guide.section.outcome"), title: t(`view.${activeView}.title`), body: t(`guide.${activeView}.outcome`) },
+    { target: guidePrimaryTargets[activeView], eyebrow: t("tour.evidence"), title: t(`guide.${activeView}.inspect`), body: t(`view.${activeView}.desc`) },
+    { target: guideSecondaryTargets[activeView], eyebrow: t("tour.limit"), title: t(`guide.${activeView}.detail`), body: t(`guide.${activeView}.caution`) },
+  ];
+  if (["destinations", "subscriptions", "messages", "evidence", "files"].includes(activeView)) {
+    guideSteps.push({ target: ".table-footer", eyebrow: t("guide.action"), title: t("guide.table.page.title"), body: t("guide.table.page.body"), caution: t("guide.table.page.caution") });
+  }
+  if (activeView === "messages") {
+    guideSteps.splice(5, 0, { target: ".message-load-more, .best-effort", eyebrow: t("guide.action"), title: t("guide.messages.load.title"), body: t("guide.messages.load.body"), caution: t("guide.messages.load.caution") });
+  }
+  if (activeView === "journals") {
+    guideSteps.push({ target: ".journal-reference-head", eyebrow: t("guide.action"), title: t("guide.journals.load.title"), body: t("guide.journals.load.body"), caution: t("guide.journals.load.caution") });
+  }
+  if (activeView === "case") {
+    guideSteps.push({ target: ".case-list", eyebrow: t("guide.action"), title: t("guide.case.pick.title"), body: t("guide.case.pick.body"), caution: t("guide.case.pick.caution") });
+  }
+  if (activeView === "trace") {
+    guideSteps.push({ target: ".trace-scope", eyebrow: t("guide.action"), title: t("guide.trace.scope.title"), body: t("guide.trace.scope.body"), caution: t("guide.trace.scope.caution") });
+  }
+  if (activeView === "export") {
+    guideSteps.push({ target: ".export-trace-option", eyebrow: t("guide.action"), title: t("guide.export.trace.title"), body: t("guide.export.trace.body"), caution: t("guide.export.trace.caution") });
+  }
+
+  const tutorialTargets = ["[data-tour='store-tabs']", ".table-card tbody tr:nth-child(2)", ".journal-detail", ".trace-summary", ".case-editor", ".export-layout > .export-card:last-child"];
+  const tutorialSteps: ScreenTourStep[] = Array.from({ length: 6 }, (_, index) => ({
+    target: tutorialTargets[index],
+    eyebrow: t("tutorial.step", { current: index + 1, total: 6 }),
+    title: t(`tutorial.step${index + 1}.title`),
+    body: t(`tutorial.step${index + 1}.body`),
+    caution: t(`tutorial.step${index + 1}.caution`),
+  }));
 
   const updateSession = (id: string, update: Partial<StoreSession> | ((session: StoreSession) => Partial<StoreSession>)) => {
     setSessions((current) => {
@@ -578,8 +618,8 @@ function ExplorerApp() {
     }
   };
 
-  const loadDemo = async () => {
-    if (demoLoadingRef.current) return;
+  const loadDemo = async (): Promise<StoreSession[] | null> => {
+    if (demoLoadingRef.current) return null;
     demoLoadingRef.current = true;
     setError("");
     try {
@@ -587,12 +627,19 @@ function ExplorerApp() {
       if (!response.ok) throw new Error(t("error.demo"));
       const scenario = await response.json() as { snapshots: ScanResult[] };
       const current = sessionsRef.current;
-      const available = scenario.snapshots.filter((demo) => !findReusableSession(current, demo.signature)).slice(0, Math.max(0, MAX_STORE_SESSIONS - current.length));
+      const available = scenario.snapshots.filter((demo) => !findReusableSession(current, demo.signature));
+      if (available.length > Math.max(0, MAX_STORE_SESSIONS - current.length)) {
+        setError(t("tabs.limit", { count: MAX_STORE_SESSIONS }));
+        return null;
+      }
       if (!available.length) {
-        const existing = scenario.snapshots.map((demo) => findReusableSession(current, demo.signature)).find(Boolean);
-        if (existing) setActiveSessionId(existing.id);
-        else setError(t("tabs.limit", { count: MAX_STORE_SESSIONS }));
-        return;
+        const existing = scenario.snapshots.map((demo) => findReusableSession(current, demo.signature));
+        if (existing.every(Boolean)) {
+          setActiveSessionId(existing.at(-1)?.id ?? null);
+          return current;
+        }
+        setError(t("tabs.limit", { count: MAX_STORE_SESSIONS }));
+        return null;
       }
       const additions = available.map((demo) => ({
         id: sessionId(demo.signature), signature: demo.signature, name: demo.directoryName, result: demo, activeView: "overview" as ViewId, selected: null,
@@ -602,11 +649,36 @@ function ExplorerApp() {
       sessionsRef.current = next;
       setSessions(next);
       setActiveSessionId(additions.at(-1)?.id ?? null);
+      return next;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
+      return null;
     } finally {
       demoLoadingRef.current = false;
     }
+  };
+
+  const applyTutorialStep = (step: number, sourceSessions = sessionsRef.current) => {
+    const investigation = sourceSessions.find((session) => session.signature.includes("synthetic-advisory-investigation"))
+      ?? sourceSessions.findLast((session) => session.result);
+    if (!investigation?.result) return;
+    const message = investigation.result.messages.find((item) => item.relatedId.startsWith("ID:SYNTHETIC:"))
+      ?? investigation.result.messages.find((item) => item.relatedId !== "Unknown")
+      ?? null;
+    const view: ViewId[] = ["overview", "compare", "journals", "trace", "case", "export"];
+    const update: Partial<StoreSession> = { activeView: view[step] };
+    if (step === 3 && message) Object.assign(update, { traceMessageId: message.relatedId, traceScope: "all", selected: null });
+    if (step === 4 && message) update.selected = { type: "message", value: message };
+    updateSession(investigation.id, update);
+    setActiveSessionId(investigation.id);
+    setDetailOpen(false);
+    setTutorialStep(step);
+  };
+
+  const startTutorial = async () => {
+    setTutorialIntro(false);
+    const demoSessions = await loadDemo();
+    if (demoSessions) applyTutorialStep(0, demoSessions);
   };
 
   const selectItem = (item: Selected) => {
@@ -741,12 +813,13 @@ function ExplorerApp() {
         <div className="brand-wrap">
           <div className="brand-mark"><Database size={19} /></div>
           <div>
-            <div className="brand-name">MQ Watcher</div>
+            <div className="brand-name">MQ Watcher <span className="brand-version">v{version}</span></div>
             <div className="brand-subtitle">{t("brand.subtitle")}</div>
           </div>
         </div>
         <div className="topbar-actions">
           <Badge tone="green"><ShieldCheck size={13} /> {t("header.readOnly")}</Badge>
+          <button className="tutorial-button" disabled={!restored} onClick={() => setTutorialIntro(true)}><PlayCircle size={15} /><span>{t("tutorial.open")}</span></button>
           <div className="locale-switch" aria-label={t("header.language")}>
             <Languages size={14} />
             <button className={locale === "ko" ? "active" : ""} onClick={() => setLocale("ko")}>한국어</button>
@@ -761,7 +834,7 @@ function ExplorerApp() {
             </button>
           </Tooltip>
           <Tooltip label={detailOpen ? t("header.detailClose") : t("header.detailOpen")}>
-            <button className="icon-button detail-toggle" onClick={() => setDetailOpen((value) => !value)} aria-label={detailOpen ? t("header.detailClose") : t("header.detailOpen")}>
+            <button data-tour="detail-toggle" className="icon-button detail-toggle" onClick={() => setDetailOpen((value) => !value)} aria-label={detailOpen ? t("header.detailClose") : t("header.detailOpen")}>
               {detailOpen ? <PanelRightClose size={17} /> : <PanelRightOpen size={17} />}
             </button>
           </Tooltip>
@@ -769,7 +842,7 @@ function ExplorerApp() {
       </header>
 
       <aside className="sidebar">
-        <div className="source-card">
+        <div className="source-card" data-tour="source">
           <span className="source-label">{t("source.label")}</span>
           {result ? (
             <>
@@ -784,7 +857,7 @@ function ExplorerApp() {
           </Button>
         </div>
 
-        <nav className="nav-list" aria-label={t("source.label")}>
+        <nav className="nav-list" data-tour="navigation" aria-label={t("source.label")}>
           {NAVIGATION.map(({ id, icon: Icon }) => (
             <button key={id} className={`nav-item ${activeView === id ? "active" : ""} ${!result ? "unavailable" : ""}`} onClick={() => navigate(id)}>
               <Icon size={17} /><span>{t(`nav.${id}`)}</span>
@@ -804,7 +877,7 @@ function ExplorerApp() {
       </aside>
 
       <main className={`main-content ${detailOpen ? "with-detail" : ""}`}>
-        <div className="store-tabs" role="tablist" aria-label={t("tabs.label")}>
+        <div className="store-tabs" data-tour="store-tabs" role="tablist" aria-label={t("tabs.label")}>
           {sessions.map((session) => <button key={session.id} role="tab" aria-selected={session.id === activeSessionId} className={`store-tab ${session.id === activeSessionId ? "active" : ""}`} onClick={() => setActiveSessionId(session.id)}>
             {session.status === "scanning" ? <LoaderCircle className="spin" size={13} /> : <HardDrive size={13} />}
             <span title={session.name}>{session.name}</span>
@@ -815,13 +888,13 @@ function ExplorerApp() {
           <span className="store-tab-cap">{sessions.length}/{MAX_STORE_SESSIONS}</span>
         </div>
         <div className="page-frame">
-          <div className="page-heading">
+          <div className="page-heading" data-tour="heading">
             <div>
               <div className="breadcrumb">MQ Watcher <ChevronRight size={13} /> {activeNavLabel}</div>
               <h1>{t(`view.${activeView}.title`)}</h1>
               <p>{t(`view.${activeView}.desc`)}</p>
             </div>
-            <div className="heading-actions"><Button variant="secondary" className="view-guide-button" onClick={() => setGuideOpen(true)}><CircleHelp size={15} />{t("guide.open")}</Button>{result ? <div className="heading-meta"><span>{t("page.lastScan")}</span><strong>{new Date(result.scannedAt).toLocaleString(localeCode(locale))}</strong></div> : null}</div>
+            <div className="heading-actions"><Button variant="secondary" className="view-guide-button" onClick={() => setGuideStep(0)}><CircleHelp size={15} />{t("guide.open")}</Button>{result ? <div className="heading-meta"><span>{t("page.lastScan")}</span><strong>{new Date(result.scannedAt).toLocaleString(localeCode(locale))}</strong></div> : null}</div>
           </div>
 
           {contextHelp ? (
@@ -834,16 +907,17 @@ function ExplorerApp() {
 
           {error || activeSession?.error ? <div className="error-alert"><AlertCircle size={18} /><div><strong>{t("error.title")}</strong><p>{error || activeSession?.error}</p></div></div> : null}
           {isPreparing || isScanning ? <ScanProgress progress={progress} percentage={percentage} preparing={isPreparing} onCancel={cancelActiveWork} /> : null}
-          {!result && !isScanning && !isPreparing ? <EmptyExplorer onOpen={openDirectory} onDemo={loadDemo} /> : null}
+          {!result && !isScanning && !isPreparing ? <EmptyExplorer onOpen={openDirectory} onDemo={loadDemo} demoReady={restored} /> : null}
 
+          <div data-tour="workspace">
           {result && !isScanning ? (
             <>
               {activeView === "overview" ? <Overview result={result} help={help} onHelp={setContextHelp} onNavigate={navigate} onSelect={selectItem} /> : null}
               {activeView === "compare" ? <SnapshotCompare sessions={sessions} onTrace={openTrace} /> : null}
-              {activeView === "case" ? <IncidentCase key={result.signature} result={result} pinCandidate={makePinCandidate(selected, result)} pinCandidates={buildPinCandidates(result)} onTrace={openTrace} /> : null}
+              {activeView === "case" ? <IncidentCase key={result.signature} result={result} pinCandidate={selectedPinCandidate} pinCandidates={buildPinCandidates(result)} tutorialCase={tutorialIncidentCase} onTrace={openTrace} /> : null}
               {activeView === "journals" ? <JournalExplorer key={result.signature} result={result} /> : null}
               {activeView === "timeline" ? <EvidenceTimeline key={result.signature} result={result} onTrace={openTrace} /> : null}
-              {activeView === "export" ? <EvidenceExport key={result.signature} result={result} sessions={sessions} /> : null}
+              {activeView === "export" ? <EvidenceExport key={result.signature} result={result} sessions={sessions} tutorialCase={tutorialIncidentCase} tutorialTraceId={activeSession?.traceMessageId ?? ""} /> : null}
               {activeView === "destinations" ? <DestinationsView key={`${result.signature}:destinations`} stateKey={`${result.signature}:destinations`} result={result} help={help} onSelect={selectItem} onHelp={setContextHelp} /> : null}
               {activeView === "subscriptions" ? <SubscriptionsView key={`${result.signature}:subscriptions`} stateKey={`${result.signature}:subscriptions`} result={result} help={help} onSelect={selectItem} onHelp={setContextHelp} /> : null}
               {activeView === "messages" ? <MessagesView key={`${result.signature}:messages`} stateKey={`${result.signature}:messages`} result={result} onSelect={selectItem} onLoadMore={() => activeSession && loadMoreMessages(activeSession.id)} loading={Boolean(activeSession?.messageLoading)} loadError={activeSession?.messageLoadError ?? ""} sourceAvailable={Boolean(activeSession?.sourceFiles?.length)} progress={activeSession?.messageProgress} /> : null}
@@ -852,6 +926,7 @@ function ExplorerApp() {
               {activeView === "files" ? <FilesView key={`${result.signature}:files`} stateKey={`${result.signature}:files`} result={result} onSelect={selectItem} /> : null}
             </>
           ) : null}
+          </div>
         </div>
       </main>
 
@@ -868,7 +943,18 @@ function ExplorerApp() {
           <SearchGroup title={t("search.rawStrings")} items={searchResults.strings} render={(item) => ({ title: item.value, meta: `${item.file} · ${formatOffset(item.offset)}`, select: () => { setActiveView("messages"); setSearchOpen(false); } })} />
         </ScrollArea>
       </Dialog>
-      <ViewGuideDialog view={activeView} open={guideOpen} onOpenChange={setGuideOpen} />
+      <Dialog open={tutorialIntro} onOpenChange={setTutorialIntro} title={t("tutorial.title")} description={t("tutorial.description")}>
+        <div className="tutorial-preview">
+          <video key={locale} controls preload="metadata" poster={`/tutorial/${locale}/scenario-overview.png`}>
+            <source src={`/tutorial/${locale}/mq-watcher-walkthrough.mp4`} type="video/mp4" />
+            <track kind="captions" src={`/tutorial/${locale}/captions.vtt`} srcLang={locale} label={locale === "ko" ? "한국어" : "English"} />
+          </video>
+          <div className="tutorial-summary"><strong>{t("tutorial.flowTitle")}</strong><p>{t("tutorial.flow")}</p><small>{t("tutorial.synthetic")}</small></div>
+        </div>
+        <div className="dialog-actions"><Button variant="secondary" onClick={() => setTutorialIntro(false)}>{t("tour.close")}</Button><Button onClick={() => void startTutorial()}><PlayCircle size={15} />{t("tutorial.start")}</Button></div>
+      </Dialog>
+      <ScreenTour open={guideStep !== null} steps={guideSteps} step={guideStep ?? 0} previousLabel={t("tour.previous")} nextLabel={t("tour.next")} finishLabel={t("tour.finish")} closeLabel={t("tour.close")} onStepChange={setGuideStep} onClose={() => setGuideStep(null)} />
+      <ScreenTour open={tutorialStep !== null} steps={tutorialSteps} step={tutorialStep ?? 0} previousLabel={t("tour.previous")} nextLabel={t("tour.next")} finishLabel={t("tour.finish")} closeLabel={t("tour.close")} onStepChange={applyTutorialStep} onClose={() => setTutorialStep(null)} />
       {toast ? <div className="app-toast" role="status" aria-live="polite"><Info size={17} /><span>{toast}</span></div> : null}
     </div>
   );
@@ -878,7 +964,7 @@ function MetricCard({ label, value, sub, icon: Icon, help, onHelp }: { label: st
   return <Card className="metric-card"><div className="metric-head"><span className="metric-icon"><Icon size={17} /></span><span className="metric-label">{label}</span>{help ? <HelpButton help={help} onHelp={onHelp} /> : null}</div><div className="metric-value">{value}</div><p>{sub}</p></Card>;
 }
 
-function EmptyExplorer({ onOpen, onDemo }: { onOpen: () => void; onDemo: () => void }) {
+function EmptyExplorer({ onOpen, onDemo, demoReady }: { onOpen: () => void; onDemo: () => void; demoReady: boolean }) {
   const { t } = useI18n();
   return (
     <div className="empty-layout">
@@ -886,7 +972,7 @@ function EmptyExplorer({ onOpen, onDemo }: { onOpen: () => void; onDemo: () => v
         <div className="empty-icon"><FolderOpen size={30} /></div>
         <Badge tone="green"><ShieldCheck size={13} /> {t("empty.readOnly")}</Badge>
         <h2>{t("empty.title")}</h2><p>{t("empty.body")}</p>
-        <div className="empty-actions"><Button onClick={onOpen}><FolderOpen size={16} /> {t("empty.select")}</Button><Button variant="secondary" onClick={onDemo}><ListTree size={16} /> {t("empty.demo")}</Button></div>
+        <div className="empty-actions"><Button onClick={onOpen}><FolderOpen size={16} /> {t("empty.select")}</Button><Button variant="secondary" disabled={!demoReady} onClick={onDemo}><ListTree size={16} /> {t("empty.demo")}</Button></div>
         <div className="empty-support"><span><Database size={15} /> {t("empty.persistent")}</span><span><FileArchive size={15} /> {t("empty.temp")}</span><span><Binary size={15} /> {t("empty.raw")}</span></div>
       </Card>
       <div className="principle-grid">
