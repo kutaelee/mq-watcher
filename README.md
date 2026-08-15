@@ -38,7 +38,8 @@ Each analysis page includes **How to use this view**, a three-step visual readin
 - A bounded printable-string scanner for legacy or unsupported layouts
 - A source-based parser for KahaDB journal batches, record headers, command envelopes, checksums, and selected metadata
 - An evidence-correlation view for message, ACK/remove, subscription, transaction, and Advisory relationships
-- A six-part investigation workbench for multiple Stores, snapshot comparison, incident notes, journal review, evidence ordering, and redacted export
+- Trace all supported Store evidence associated with one exact `JMSMessageID`, separated by Store and journal
+- An investigation workbench for multiple Stores, snapshot comparison, incident notes, journal review, evidence ordering, Message ID tracing, and redacted export
 - A loopback-only CLI that serves the UI locally
 - A standalone Windows/Linux executable that does not require Node.js
 
@@ -52,6 +53,7 @@ The workbench organizes evidence without turning observations into an automated 
 4. **Journal Retention Explorer** — reverse-index observed records and evidence references by journal file. It shows where evidence was observed; it does not decide why a journal was retained or whether it is currently in use.
 5. **Evidence Timeline** — order records only by offset within each journal. MQ Watcher does not invent a global time order between different journal files.
 6. **Evidence Bundle Export** — build a cancellable ZIP in a Worker with progress, optional centralized redaction, a manifest, and per-entry SHA-256 values. The bundle contains derived evidence, not the selected Store files.
+7. **Trace a Message** — search one exact, case-sensitive `JMSMessageID` in the current Store, every open Store, or selected Store tabs. Results remain separated by Store and journal; repeated ADD and missing ACK observations retain explicit interpretation limits.
 
 Investigation Leads are presented as relevance prompts. Every lead explains why it was surfaced and what it does **not** prove; it is not an anomaly score or a root-cause score.
 
@@ -210,7 +212,7 @@ npm run test:portable
 npm pack --dry-run
 ```
 
-CI runs install, lint, strict type checking, build, the full test suite, fixture tests, broker-fixture tests, portable-cache tests, and the real Chromium IndexedDB migration test on Windows and Ubuntu where configured. Tag builds also rebuild and smoke-test the standalone executables before publishing archives and `SHA256SUMS.txt`. See the completed [v0.3 workbench validation](docs/validation/v0.3-investigation-workbench.md) and the current [v0.3.1 usability validation](docs/validation/v0.3.1-usability.md).
+CI runs install, lint, strict type checking, build, the full test suite, fixture tests, broker-fixture tests, portable-cache tests, and the real Chromium IndexedDB migration test on Windows and Ubuntu where configured. Tag builds also rebuild and smoke-test the standalone executables before publishing archives and `SHA256SUMS.txt`. See the completed [v0.3 workbench validation](docs/validation/v0.3-investigation-workbench.md), [v0.3.1 usability validation](docs/validation/v0.3.1-usability.md), and the current unpublished [v0.4.0 Message Trace release-candidate validation](docs/validation/message-trace.md).
 
 ## License
 

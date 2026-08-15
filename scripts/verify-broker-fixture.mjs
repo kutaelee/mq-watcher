@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { scanPath } from "./fixture-lib.mjs";
+import { traceMessageEvidence } from "../app/lib/workbench.mjs";
 
 export const brokerVersions = ["5.13.5", "5.15.16", "5.18.7"];
 
@@ -62,6 +63,21 @@ export async function verifyBrokerFixture(fixtureRoot, expectedVersion) {
   assert.equal(subscription?.subscriptionKey, "fixture-durable-client:prices-sub");
   assert.equal(add("PRICES")?.destination?.type, "Topic");
 
+  const ordersTrace = traceMessageEvidence([first.result], add("ORDERS").messageId);
+  const ackTrace = traceMessageEvidence([first.result], ackAdd.messageId);
+  const transactionTrace = traceMessageEvidence([first.result], transactionAdd.messageId);
+  const durableTopicTrace = traceMessageEvidence([first.result], add("PRICES").messageId);
+  assert.equal(ordersTrace.summary.addRecords, 1);
+  assert.equal(ackTrace.summary.addRecords, 1);
+  assert.equal(ackTrace.summary.ackRemoveRecords, 1);
+  assert.ok(transactionTrace.summary.addRecords >= 1);
+  assert.ok(transactionTrace.summary.transactionRecords >= 1);
+  assert.equal(durableTopicTrace.summary.addRecords, 1);
+  for (const trace of [ordersTrace, ackTrace, transactionTrace, durableTopicTrace]) {
+    assert.equal(trace.storeRefs.length, 1);
+    assert.ok(trace.storeRefs[0].evidence.every((evidence) => evidence.sourceFile && Number.isFinite(evidence.offset)));
+  }
+
   for (const entry of manifest.files) {
     const bytes = await readFile(path.join(fixtureRoot, "kahadb", ...entry.path.split("/")));
     assert.equal(containsWorkstationIdentifier(bytes), false, "fixture must not expose workstation identifiers");
@@ -74,6 +90,7 @@ export async function verifyBrokerFixture(fixtureRoot, expectedVersion) {
     records: records.length,
     transactionId: transactionAdd.transactionId,
     sourceUnchanged: first.sourceUnchanged,
+    traces: { orders: ordersTrace.summary, acknowledged: ackTrace.summary, transaction: transactionTrace.summary, durableTopic: durableTopicTrace.summary },
   };
 }
 

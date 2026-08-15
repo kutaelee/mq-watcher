@@ -38,7 +38,8 @@ MQ Watcher는 구조에 따라 해석된 값, 파일에서 직접 관찰된 값,
 - 구형 또는 지원 범위 밖 저장소를 위한 범위 제한 문자열 스캐너
 - KahaDB 저널 배치, 레코드 헤더, 명령 인벨로프, 체크섬과 일부 메타데이터를 소스 구조에 따라 읽는 파서
 - 메시지, ACK/삭제, 구독, 트랜잭션, Advisory 간 연결을 살펴보는 증거 관계 화면
-- 여러 저장소, 스냅샷 비교, 조사 메모, 저널 검토, 증거 순서, 비식별 내보내기를 한곳에서 다루는 6개 조사 워크벤치 기능
+- 하나의 정확한 `JMSMessageID`와 연결된 지원 범위의 Store 증거를 Store·journal별로 추적
+- 여러 저장소, 스냅샷 비교, 조사 메모, 저널 검토, 증거 순서, 메시지 추적, 비식별 내보내기를 한곳에서 다루는 조사 워크벤치 기능
 - UI를 로컬에서 제공하고 루프백 주소에만 바인딩하는 CLI
 - Node.js 없이 실행할 수 있는 Windows/Linux 단독 실행 파일
 
@@ -52,6 +53,7 @@ MQ Watcher는 구조에 따라 해석된 값, 파일에서 직접 관찰된 값,
 4. **저널 보존 탐색** — 저널 파일별로 관찰된 구조화 레코드와 증거 참조를 역색인합니다. 증거가 어디에서 관찰되었는지는 보여주지만 파일이 보존된 이유나 현재 사용 중인지 자동 판정하지 않습니다.
 5. **증거 타임라인** — 각 저널 안에서만 오프셋 순서로 레코드를 정렬합니다. 서로 다른 저널 파일 사이의 전역 시간 순서는 임의로 만들지 않습니다.
 6. **증거 번들 내보내기** — Worker에서 진행률과 취소를 지원하는 ZIP을 만들며, 선택적 통합 비식별 처리, manifest, 항목별 SHA-256을 포함합니다. 선택한 저장소 원본 파일은 번들에 넣지 않습니다.
+7. **메시지 추적** — 대소문자를 포함해 정확히 일치하는 `JMSMessageID`를 현재 Store, 열린 모든 Store 또는 선택한 Store에서 찾습니다. 결과는 Store·journal별로 분리하며 반복 ADD와 ACK 부재를 중복 전달·미승인으로 단정하지 않습니다.
 
 조사 단서는 이상 점수나 원인 점수가 아니라 조사 관련성 안내입니다. 각 단서에는 표시된 이유와 해당 관찰만으로는 증명할 수 없는 내용이 함께 표시됩니다.
 
@@ -210,7 +212,7 @@ npm run test:portable
 npm pack --dry-run
 ```
 
-CI는 설정된 Windows와 Ubuntu 작업에서 설치, lint, 엄격한 타입 검사, build, 전체 테스트, fixture 테스트, 브로커 fixture 테스트, 포터블 캐시 테스트와 실제 Chromium IndexedDB 마이그레이션 테스트를 실행합니다. 태그 빌드는 단독 실행 파일을 다시 빌드하고 smoke test를 통과한 뒤 압축 파일과 `SHA256SUMS.txt`를 배포합니다. 완료된 [v0.3 워크벤치 검증](docs/validation/v0.3-investigation-workbench.md)과 현재 [v0.3.1 사용성 검증](docs/validation/v0.3.1-usability.md)을 참고하십시오.
+CI는 설정된 Windows와 Ubuntu 작업에서 설치, lint, 엄격한 타입 검사, build, 전체 테스트, fixture 테스트, 브로커 fixture 테스트, 포터블 캐시 테스트와 실제 Chromium IndexedDB 마이그레이션 테스트를 실행합니다. 태그 빌드는 단독 실행 파일을 다시 빌드하고 smoke test를 통과한 뒤 압축 파일과 `SHA256SUMS.txt`를 배포합니다. 완료된 [v0.3 워크벤치 검증](docs/validation/v0.3-investigation-workbench.md), [v0.3.1 사용성 검증](docs/validation/v0.3.1-usability.md), 현재 공개 전인 [v0.4.0 메시지 추적 릴리스 후보 검증](docs/validation/message-trace.md)을 참고하십시오.
 
 ## 라이선스
 

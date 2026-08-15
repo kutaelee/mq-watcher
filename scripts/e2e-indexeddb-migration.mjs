@@ -334,16 +334,18 @@ const addIdempotenceSentinelsExpression = `(${async function addIdempotenceSenti
   });
   transaction.objectStore("incident-cases").put({
     id: "current-schema-case",
+    storeSignature: "current-schema-store",
+    storeName: "current-schema-demo",
     title: "Unresolved reference sentinel",
     hypothesis: "UI must preserve and mark this reference unresolved",
     notes: [],
     pins: [{
       id: "foreign-pin",
       semanticKey: "message:ID:FOREIGN:UNRESOLVED",
-      storeSignature: "foreign-store-signature",
-      storeName: "foreign-store",
+      storeSignature: "current-schema-store",
+      storeName: "current-schema-demo",
       kind: "message",
-      label: "Foreign unresolved evidence",
+      label: "Unresolved message evidence",
       provenance: { file: "db-99.log", offset: 99 },
       confidence: "Observed",
       pinnedAt: "2026-08-14T00:00:00.000Z",
@@ -389,12 +391,12 @@ const openCaseAndReadUnresolvedExpression = `(${async function openCaseAndReadUn
   if (!document.querySelector(".case-layout")) throw new Error("the hydrated Incident Case view did not open");
   while (Date.now() < deadline) {
     const text = document.body?.innerText ?? "";
-    if ((text.includes("현재 미해결") || text.includes("Currently unresolved")) && text.includes("Foreign unresolved evidence")) {
+    if ((text.includes("현재 미해결") || text.includes("Currently unresolved")) && text.includes("Unresolved message evidence")) {
       return text;
     }
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
-  throw new Error("the restored foreign evidence reference was not rendered as unresolved");
+  throw new Error("the restored same-Store semantic reference was not rendered as unresolved");
 }})()`;
 
 const setKoreanLocaleExpression = `(${async function setKoreanLocale() {
@@ -416,8 +418,17 @@ const pinEvidenceFromCaseExpression = `(${async function pinEvidenceFromCase() {
   setter.call(input, "ORDERS");
   input.dispatchEvent(new Event("input", { bubbles: true }));
   while (Date.now() < deadline) {
-    const pin = document.querySelector(".case-evidence-candidates button");
-    if (pin) {
+    const candidate = document.querySelector(".case-candidate-select");
+    if (candidate) {
+      candidate.click();
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  while (Date.now() < deadline) {
+    const selected = document.querySelector(".case-pin-action small")?.textContent ?? "";
+    const pin = document.querySelector(".case-pin-action .button");
+    if (selected.includes("ORDERS") && pin) {
       pin.click();
       break;
     }
@@ -514,6 +525,125 @@ const loadSyntheticDemoTwiceExpression = `(${async function loadSyntheticDemoTwi
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   throw new Error("synthetic demo did not open exactly two snapshots");
+}})()`;
+
+const verifyDirectMessagePageExpression = `(${async function verifyDirectMessagePage() {
+  const deadline = Date.now() + 10_000;
+  const messagesButton = () => Array.from(document.querySelectorAll(".nav-item")).find((candidate) => /메시지|Message and record/u.test(candidate.textContent ?? ""));
+  while (Date.now() < deadline && !document.querySelector(".table-footer .page-jump")) {
+    messagesButton()?.click();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  const footer = document.querySelector(".table-footer");
+  const pageSize = footer?.querySelector("select");
+  if (!footer || !pageSize) throw new Error("message pagination controls are unavailable");
+  const selectSetter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
+  selectSetter.call(pageSize, "25");
+  pageSize.dispatchEvent(new Event("change", { bubbles: true }));
+
+  const waitForPage = async (page, rowCount, rangePattern) => {
+    while (Date.now() < deadline) {
+      const current = document.querySelector('.page-numbers button[aria-current="page"]')?.textContent?.trim();
+      const rows = document.querySelectorAll(".table-card tbody tr").length;
+      const text = document.querySelector(".table-footer")?.textContent ?? "";
+      if (current === String(page) && rows === rowCount && rangePattern.test(text)) return text;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    throw new Error(`message page ${page} did not render the expected rows`);
+  };
+  await waitForPage(1, 25, /(?:1–25.*41|41.*1–25)/u);
+
+  const input = document.querySelector(".page-jump input");
+  const go = document.querySelector(".page-jump button");
+  const inputSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  if (!input || !go) throw new Error("direct page input is unavailable");
+  inputSetter.call(input, "2");
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  go.click();
+  const second = await waitForPage(2, 16, /(?:26–41.*41|41.*26–41)/u);
+
+  inputSetter.call(input, "1");
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true }));
+  const first = await waitForPage(1, 25, /(?:1–25.*41|41.*1–25)/u);
+  return { second, first };
+}})()`;
+
+const traceComparisonOnlyMessageExpression = `(${async function traceComparisonOnlyMessage() {
+  const deadline = Date.now() + 10_000;
+  const targetId = "ID:SYNTHETIC:ADVISORY:0001";
+  while (Date.now() < deadline && !document.querySelector(".compare-picker")) {
+    const button = Array.from(document.querySelectorAll("button")).find((candidate) => /스냅샷 비교|Snapshot compare/u.test(candidate.textContent ?? ""));
+    button?.click();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  while (Date.now() < deadline) {
+    const target = Array.from(document.querySelectorAll("button.text-link")).find((button) => button.textContent?.trim() === targetId);
+    if (target) {
+      target.click();
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  while (Date.now() < deadline) {
+    const allScope = Array.from(document.querySelectorAll(".trace-scope label")).find((label) => /열린 모든 Store|All Open Stores/u.test(label.textContent ?? ""));
+    const input = allScope?.querySelector("input");
+    const text = document.querySelector(".trace-view")?.textContent ?? "";
+    if (input?.checked && text.includes(targetId) && text.includes("synthetic-advisory-investigation")) return { targetId, allScope: true };
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error("a comparison-only Message ID did not open an all-Store trace with its source Store evidence");
+}})()`;
+
+const pinTraceEvidenceInOwningStoreExpression = `(${async function pinTraceEvidenceInOwningStore() {
+  const deadline = Date.now() + 10_000;
+  const targetId = "ID:SYNTHETIC:ADVISORY:0001";
+  const select = document.querySelector(".trace-evidence-row button");
+  if (!select) throw new Error("the trace result does not expose a case selection action");
+  select.click();
+  while (Date.now() < deadline && !document.querySelector(".case-layout")) await new Promise((resolve) => setTimeout(resolve, 50));
+  const storeName = document.querySelector(".source-name")?.textContent ?? "";
+  if (!storeName.includes("synthetic-advisory-investigation")) throw new Error(`trace evidence opened the wrong Store: ${storeName}`);
+
+  if (!document.querySelector(".case-editor")) {
+    const create = document.querySelector(".case-list-empty button") ?? document.querySelector(".case-list-head button");
+    if (!create) throw new Error("a Store-scoped case could not be created from the trace selection");
+    create.click();
+  }
+  while (Date.now() < deadline && !document.querySelector(".case-pin-action")) await new Promise((resolve) => setTimeout(resolve, 50));
+  const selected = document.querySelector(".case-pin-action small")?.textContent?.trim() ?? "";
+  const pin = Array.from(document.querySelectorAll(".case-pin-action button")).find((button) => /증거 고정|Pin evidence/u.test(button.textContent ?? ""));
+  if (!selected || !pin || pin.disabled) throw new Error("the trace selection was not retained as the case's current evidence");
+  pin.click();
+  while (Date.now() < deadline) {
+    const semanticKey = Array.from(document.querySelectorAll(".case-pins code")).find((code) => code.textContent === `message:${targetId}`)?.textContent;
+    if (semanticKey) return { storeName, selected, semanticKey };
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error("the selected trace occurrence was not pinned to its owning Store case");
+}})()`;
+
+const rejectInvalidExportTraceExpression = `(${async function rejectInvalidExportTrace() {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline && !document.querySelector("#export-trace")) {
+    const button = Array.from(document.querySelectorAll("button")).find((candidate) => /증거 번들 내보내기|Evidence bundle/u.test(candidate.textContent ?? ""));
+    button?.click();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  const input = document.querySelector("#export-trace");
+  if (!input) throw new Error("Evidence Export trace input is unavailable");
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  setter.call(input, "ID: INVALID VALUE");
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  document.querySelector(".export-button")?.click();
+  while (Date.now() < deadline) {
+    const alert = document.querySelector('[role="alert"]')?.textContent ?? "";
+    if (/정확한 JMSMessageID|exact JMSMessageID/u.test(alert) && !document.querySelector(".export-progress")) return alert;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error("an invalid non-empty export Message ID did not block bundle creation with a visible error");
 }})()`;
 
 const inspectJournalStoreIsolationExpression = `(${async function inspectJournalStoreIsolation() {
@@ -684,7 +814,7 @@ async function main() {
     assertIdempotentReload(secondReload);
     const caseText = await evaluate(client, openCaseAndReadUnresolvedExpression);
     assert.match(caseText, /현재 미해결|Currently unresolved/u);
-    assert.match(caseText, /Foreign unresolved evidence/u);
+    assert.match(caseText, /Unresolved message evidence/u);
     assert.match(await evaluate(client, pinEvidenceFromCaseExpression), /ORDERS/u);
     assert.equal(typeof await evaluate(client, createAndDeleteCaseExpression), "string");
     const progressiveJournal = await evaluate(client, inspectProgressiveJournalExpression);
@@ -713,10 +843,18 @@ async function main() {
     assert.equal(restoredState.journalVisible, true, "the active Journal view must survive a server restart");
     const restartedCaseText = await evaluate(client, openCaseAndReadUnresolvedExpression);
     assert.match(restartedCaseText, /현재 미해결|Currently unresolved/u);
-    assert.match(restartedCaseText, /Foreign unresolved evidence/u);
+    assert.match(restartedCaseText, /Unresolved message evidence/u);
     assert.match(await evaluate(client, closeStoreAndReadToastExpression), /저장소를 먼저 열어|Open a Store first/u);
     const syntheticTabs = await evaluate(client, loadSyntheticDemoTwiceExpression);
     assert.equal(syntheticTabs.length, 2, "double-clicking the demo action must open each synthetic snapshot once");
+    const directMessagePage = await evaluate(client, verifyDirectMessagePageExpression);
+    assert.match(directMessagePage.second, /26–41/u, "the Go action must jump directly to message page 2");
+    assert.match(directMessagePage.first, /1–25/u, "pressing Enter must return directly to message page 1");
+    assert.deepEqual(await evaluate(client, traceComparisonOnlyMessageExpression), { targetId: "ID:SYNTHETIC:ADVISORY:0001", allScope: true });
+    const pinnedTrace = await evaluate(client, pinTraceEvidenceInOwningStoreExpression);
+    assert.match(pinnedTrace.storeName, /synthetic-advisory-investigation/u);
+    assert.equal(pinnedTrace.semanticKey, "message:ID:SYNTHETIC:ADVISORY:0001");
+    assert.match(await evaluate(client, rejectInvalidExportTraceExpression), /정확한 JMSMessageID|exact JMSMessageID/u);
     const isolatedJournal = await evaluate(client, inspectJournalStoreIsolationExpression);
     assert.deepEqual(isolatedJournal, { expanded: 150, reset: 19 });
 
@@ -763,7 +901,7 @@ async function main() {
       "incident case preserved",
       "schema-meta version recorded",
       "same-version reload preserved current-schema sentinels",
-      "restored foreign case reference rendered as unresolved",
+      "restored same-Store semantic reference rendered as unresolved",
       "case evidence picker pinned a selected observation",
       "case creation and deletion persisted to IndexedDB",
       "journal references loaded 50 initially and continued to 150 on request",
@@ -772,6 +910,10 @@ async function main() {
       "cached Store, active Journal view, and unresolved case survived an application server restart on the same origin",
       "navigation without a Store displayed an explanatory toast",
       "double-clicking the synthetic demo opened two unique snapshots without a duplicate race",
+      "message pagination jumped 1→2 with Go and 2→1 with Enter",
+      "Snapshot Compare opened a B-only Message ID in an all-Store trace",
+      "a trace occurrence opened its owning Store case, preserved the selection, and pinned one semantic reference",
+      "Evidence Export blocked an invalid non-empty Message ID with a visible error",
       "Journal selection and progressive reference count reset between Store tabs",
       "application rendered without browser errors",
     ],

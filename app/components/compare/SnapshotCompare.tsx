@@ -13,7 +13,7 @@ function valueLabel(value: number | null) {
   return value === null ? "—" : value.toLocaleString();
 }
 
-export function SnapshotCompare({ sessions }: { sessions: SessionOption[] }) {
+export function SnapshotCompare({ sessions, onTrace }: { sessions: SessionOption[]; onTrace: (messageId: string, scope?: "current" | "all") => void }) {
   const { t } = useI18n();
   const ready = sessions.filter((session): session is SessionOption & { result: ScanResult } => Boolean(session.result));
   const [leftId, setLeftId] = useState(ready[0]?.id ?? "");
@@ -40,6 +40,6 @@ export function SnapshotCompare({ sessions }: { sessions: SessionOption[] }) {
     </div>
     <div className="best-effort"><Info size={15} /><span>{t("compare.limit")}</span></div>
     <Card className="identity-rules"><strong>{t("compare.identityRules")}</strong><p>{t("compare.identityProvenance")}</p><div>{Object.entries(DIFF_IDENTITY_RULES).map(([entity, rule]) => <code key={entity}>{t(`compare.entity.${entity}`)} = {rule}</code>)}</div></Card>
-    <Card className="table-card"><div className="table-scroll"><table><thead><tr><th>{t("compare.category")}</th><th>{t("compare.observation")}</th><th>{t("compare.snapshotA")}</th><th>{t("compare.snapshotB")}</th><th>{t("compare.result")}</th></tr></thead><tbody>{rows.map((row: SnapshotDiffRow) => <tr key={row.id}><td><Badge tone="blue">{t(`compare.category.${row.category}`)}</Badge></td><td className="mono-cell">{row.key}</td><td>{valueLabel(row.leftValue)}</td><td>{valueLabel(row.rightValue)}</td><td><Badge tone={row.status === "changed" ? "amber" : "neutral"}>{t(`compare.status.${row.status}`)}</Badge>{row.delta !== null ? <small className="diff-delta">{row.delta > 0 ? "+" : ""}{row.delta.toLocaleString()}</small> : null}</td></tr>)}</tbody></table>{!rows.length ? <p className="compare-no-diff">{t("compare.noDiff")}</p> : null}</div></Card>
+    <Card className="table-card"><div className="table-scroll"><table><thead><tr><th>{t("compare.category")}</th><th>{t("compare.observation")}</th><th>{t("compare.snapshotA")}</th><th>{t("compare.snapshotB")}</th><th>{t("compare.result")}</th></tr></thead><tbody>{rows.map((row: SnapshotDiffRow) => <tr key={row.id}><td><Badge tone="blue">{t(`compare.category.${row.category}`)}</Badge></td><td className="mono-cell">{row.category === "message" ? <button className="text-link" onClick={() => onTrace(row.key, "all")}>{row.key}</button> : row.key}</td><td>{valueLabel(row.leftValue)}</td><td>{valueLabel(row.rightValue)}</td><td><Badge tone={row.status === "changed" ? "amber" : "neutral"}>{t(`compare.status.${row.status}`)}</Badge>{row.delta !== null ? <small className="diff-delta">{row.delta > 0 ? "+" : ""}{row.delta.toLocaleString()}</small> : null}</td></tr>)}</tbody></table>{!rows.length ? <p className="compare-no-diff">{t("compare.noDiff")}</p> : null}</div></Card>
   </div>;
 }

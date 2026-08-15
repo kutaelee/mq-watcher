@@ -87,8 +87,10 @@ import { JournalExplorer } from "./journals/JournalExplorer";
 import { EvidenceTimeline } from "./timeline/EvidenceTimeline";
 import { EvidenceExport } from "./export/EvidenceExport";
 import { UpdatePanel } from "./UpdatePanel";
+import { PageNavigator } from "./PageNavigator";
+import { MessageTrace } from "./trace/MessageTrace";
 
-type ViewId = "overview" | "compare" | "case" | "journals" | "timeline" | "export" | "destinations" | "subscriptions" | "messages" | "evidence" | "files";
+type ViewId = "overview" | "compare" | "case" | "journals" | "timeline" | "export" | "destinations" | "subscriptions" | "messages" | "trace" | "evidence" | "files";
 
 type Selected =
   | { type: "destination"; value: DestinationRecord }
@@ -117,8 +119,17 @@ type StoreSession = {
   openedAt: string;
   restored: boolean;
   sourceAccess: "granted" | "cached-only";
+  sourceFiles?: FileInput[];
+  messageLoading?: boolean;
+  messageLoadError?: string;
+  messageProgress?: WorkerProgress;
+  messageLoadToken?: string;
+  traceMessageId?: string;
+  traceScope?: "current" | "all";
   scanToken?: string;
 };
+
+const MESSAGE_BATCH_SIZE = 2500;
 
 type TableColumn<T> = {
   key: string;
@@ -155,6 +166,7 @@ const NAVIGATION: Array<{ id: ViewId; icon: typeof Gauge }> = [
   { id: "destinations", icon: Boxes },
   { id: "subscriptions", icon: Network },
   { id: "messages", icon: MessageSquareText },
+  { id: "trace", icon: Search },
   { id: "evidence", icon: ListTree },
   { id: "files", icon: Files },
 ];
@@ -297,9 +309,14 @@ function ViewGuideDialog({ view, open, onOpenChange }: { view: ViewId; open: boo
     { icon: ViewIcon, label: t(`guide.${view}.inspect`) },
     { icon: PanelRightOpen, label: t(`guide.${view}.detail`) },
   ];
-  return <Dialog open={open} onOpenChange={onOpenChange} title={`${t(`view.${view}.title`)} · ${t("guide.title")}`} description={t("guide.description")}>
+  return <Dialog open={open} onOpenChange={onOpenChange} title={`${t(`view.${view}.title`)} · ${t("guide.title")}`} description={t(`view.${view}.desc`)}>
+    <div className="view-guide-context">
+      <section><strong>{t("guide.section.before")}</strong><p>{t(`guide.${view}.before`)}</p></section>
+      <section><strong>{t("guide.section.when")}</strong><p>{t(`guide.${view}.when`)}</p></section>
+      <section><strong>{t("guide.section.outcome")}</strong><p>{t(`guide.${view}.outcome`)}</p></section>
+    </div>
     <div className="view-guide-flow">{nodes.map(({ icon: Icon, label }, index) => <Fragment key={label}><div className="view-guide-node"><span>{index + 1}</span><Icon size={22} /><strong>{label}</strong></div>{index < nodes.length - 1 ? <ChevronRight className="view-guide-arrow" size={22} /> : null}</Fragment>)}</div>
-    <div className="best-effort view-guide-limit"><Info size={15} /><span>{t("guide.limit")}</span></div>
+    <div className="best-effort view-guide-limit"><Info size={15} /><span>{t(`guide.${view}.caution`)}</span></div>
   </Dialog>;
 }
 
@@ -348,6 +365,7 @@ function ExplorerApp() {
   const resourcesRef = useRef(new SessionResourceLedger());
   const toastTimerRef = useRef<number | null>(null);
   const demoLoadingRef = useRef(false);
+  const messageTokenRef = useRef(0);
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? null;
   const result = activeSession?.result ?? null;
   const activeView = activeSession?.activeView ?? "overview";
@@ -356,9 +374,13 @@ function ExplorerApp() {
   const isScanning = activeSession?.status === "scanning";
 
   const updateSession = (id: string, update: Partial<StoreSession> | ((session: StoreSession) => Partial<StoreSession>)) => {
-    setSessions((current) => current.map((session) => session.id === id
-      ? { ...session, ...(typeof update === "function" ? update(session) : update) }
-      : session));
+    setSessions((current) => {
+      const next = current.map((session) => session.id === id
+        ? { ...session, ...(typeof update === "function" ? update(session) : update) }
+        : session);
+      sessionsRef.current = next;
+      return next;
+    });
   };
 
   const setActiveView = (view: ViewId) => {
@@ -477,7 +499,7 @@ function ExplorerApp() {
       const placeholder: StoreSession = {
         id, signature, name: handle.name, result: null, activeView: "overview", selected: null,
         status: "scanning", progress: initialProgress, error: "", openedAt: new Date().toISOString(), restored: false,
-        sourceAccess: "granted", scanToken: reservation.token,
+        sourceAccess: "granted", sourceFiles: files, scanToken: reservation.token,
       };
       if (!findReusableSession(sessionsRef.current, signature)) sessionsRef.current = [...sessionsRef.current, placeholder];
       setSessions(sessionsRef.current);
@@ -486,7 +508,7 @@ function ExplorerApp() {
       const cached = await readScanCache(signature).catch(() => null);
       if (!reservationsRef.current.isCurrent(signature, reservation.token)) return;
       if (cached) {
-        setSessions((current) => current.map((session) => session.id === id && session.scanToken === reservation.token ? { ...session, result: cached, status: "ready", restored: true, sourceAccess: "granted", scanToken: undefined } : session));
+        setSessions((current) => current.map((session) => session.id === id && session.scanToken === reservation.token ? { ...session, result: cached, status: "ready", restored: true, sourceAccess: "granted", sourceFiles: files, scanToken: undefined } : session));
         reservationsRef.current.release(signature, reservation.token);
         resourcesRef.current.cleanup(id);
         if (preparationControllerRef.current === controller) {
@@ -590,6 +612,78 @@ function ExplorerApp() {
   const selectItem = (item: Selected) => {
     setSelected(item);
     setDetailOpen(true);
+  };
+
+  const openTrace = (messageId: string, scope: "current" | "all" = "current") => {
+    if (!activeSessionId) return;
+    updateSession(activeSessionId, { activeView: "trace", traceMessageId: messageId.trim(), traceScope: scope });
+    setDetailOpen(false);
+  };
+
+  const selectTraceEvidence = (storeSignature: string, evidence: import("@/app/lib/types").MessageTraceEvidence) => {
+    const session = sessionsRef.current.find((item) => item.signature === storeSignature && item.result);
+    if (!session?.result) return;
+    let traceSelection: Selected = null;
+    if (evidence.recordId) {
+      const record = session.result.structured.records.find((item) => `parsed:${item.file}:${item.location.offset}` === evidence.recordId);
+      if (record) traceSelection = { type: "record", value: record };
+    }
+    if (!traceSelection && evidence.evidenceRef.startsWith("candidate:")) {
+      const candidate = session.result.messages.find((item) => `candidate:${item.id}` === evidence.evidenceRef);
+      if (candidate) traceSelection = { type: "message", value: candidate };
+    }
+    if (!traceSelection && evidence.evidenceRef.startsWith("raw:")) {
+      const raw = session.result.strings.find((item) => `raw:${item.id}` === evidence.evidenceRef);
+      if (raw) traceSelection = { type: "raw", value: raw };
+    }
+    updateSession(session.id, { activeView: "case", selected: traceSelection });
+    setActiveSessionId(session.id);
+    setDetailOpen(Boolean(traceSelection));
+  };
+
+  const loadMoreMessages = (sessionId: string) => {
+    const session = sessionsRef.current.find((item) => item.id === sessionId);
+    if (!session?.result || !session.result.truncated.messages || session.messageLoading) return;
+    if (!session.sourceFiles?.length) {
+      updateSession(sessionId, { messageLoadError: t("messages.reopenRequired") });
+      return;
+    }
+    messageTokenRef.current += 1;
+    const token = `messages-${messageTokenRef.current}`;
+    const target = session.result.messages.length + MESSAGE_BATCH_SIZE;
+    const worker = new Worker("/store-scanner.worker.js", { type: "module" });
+    workersRef.current.set(sessionId, worker);
+    resourcesRef.current.add(sessionId, { kind: "worker", value: worker });
+    updateSession(sessionId, { messageLoading: true, messageLoadError: "", messageProgress: { ...EMPTY_PROGRESS, fileCount: session.sourceFiles.length, totalBytes: session.sourceFiles.reduce((sum, item) => sum + item.file.size, 0) }, messageLoadToken: token });
+    const isCurrent = () => sessionsRef.current.some((item) => item.id === sessionId && item.messageLoadToken === token);
+    const finish = () => {
+      resourcesRef.current.cleanup(sessionId);
+      workersRef.current.delete(sessionId);
+    };
+    worker.onmessage = (event: MessageEvent<WorkerMessage>) => {
+      if (!isCurrent()) return;
+      if (event.data.type === "progress") updateSession(sessionId, { messageProgress: event.data });
+      if (event.data.type === "complete") {
+        const completed = event.data.result;
+        updateSession(sessionId, { result: completed, messageLoading: false, messageLoadToken: undefined, messageProgress: undefined });
+        writeScanCache(completed).catch(() => undefined);
+        finish();
+      }
+      if (event.data.type === "error") {
+        updateSession(sessionId, { messageLoading: false, messageLoadToken: undefined, messageProgress: undefined, messageLoadError: event.data.message });
+        finish();
+      }
+      if (event.data.type === "cancelled") {
+        updateSession(sessionId, { messageLoading: false, messageLoadToken: undefined, messageProgress: undefined });
+        finish();
+      }
+    };
+    worker.onerror = (event) => {
+      if (!isCurrent()) return;
+      updateSession(sessionId, { messageLoading: false, messageLoadToken: undefined, messageProgress: undefined, messageLoadError: event.message || t("error.scan") });
+      finish();
+    };
+    worker.postMessage({ type: "scan", signature: session.signature, directoryName: session.name, files: session.sourceFiles, messageLimit: target });
   };
 
   const navigate = (view: ViewId) => {
@@ -745,14 +839,15 @@ function ExplorerApp() {
           {result && !isScanning ? (
             <>
               {activeView === "overview" ? <Overview result={result} help={help} onHelp={setContextHelp} onNavigate={navigate} onSelect={selectItem} /> : null}
-              {activeView === "compare" ? <SnapshotCompare sessions={sessions} /> : null}
-              {activeView === "case" ? <IncidentCase result={result} openResults={sessions.flatMap((session) => session.result ? [session.result] : [])} pinCandidate={makePinCandidate(selected, result)} pinCandidates={buildPinCandidates(result)} /> : null}
+              {activeView === "compare" ? <SnapshotCompare sessions={sessions} onTrace={openTrace} /> : null}
+              {activeView === "case" ? <IncidentCase key={result.signature} result={result} pinCandidate={makePinCandidate(selected, result)} pinCandidates={buildPinCandidates(result)} onTrace={openTrace} /> : null}
               {activeView === "journals" ? <JournalExplorer key={result.signature} result={result} /> : null}
-              {activeView === "timeline" ? <EvidenceTimeline result={result} /> : null}
+              {activeView === "timeline" ? <EvidenceTimeline key={result.signature} result={result} onTrace={openTrace} /> : null}
               {activeView === "export" ? <EvidenceExport key={result.signature} result={result} sessions={sessions} /> : null}
               {activeView === "destinations" ? <DestinationsView key={`${result.signature}:destinations`} stateKey={`${result.signature}:destinations`} result={result} help={help} onSelect={selectItem} onHelp={setContextHelp} /> : null}
               {activeView === "subscriptions" ? <SubscriptionsView key={`${result.signature}:subscriptions`} stateKey={`${result.signature}:subscriptions`} result={result} help={help} onSelect={selectItem} onHelp={setContextHelp} /> : null}
-              {activeView === "messages" ? <MessagesView key={`${result.signature}:messages`} stateKey={`${result.signature}:messages`} result={result} onSelect={selectItem} /> : null}
+              {activeView === "messages" ? <MessagesView key={`${result.signature}:messages`} stateKey={`${result.signature}:messages`} result={result} onSelect={selectItem} onLoadMore={() => activeSession && loadMoreMessages(activeSession.id)} loading={Boolean(activeSession?.messageLoading)} loadError={activeSession?.messageLoadError ?? ""} sourceAvailable={Boolean(activeSession?.sourceFiles?.length)} progress={activeSession?.messageProgress} /> : null}
+              {activeView === "trace" ? <MessageTrace key={`${result.signature}:trace:${activeSession?.traceMessageId ?? ""}:${activeSession?.traceScope ?? "current"}`} current={result} stores={sessions.flatMap((session) => session.result ? [session.result] : [])} initialMessageId={activeSession?.traceMessageId} initialScope={activeSession?.traceScope} onSelectEvidence={selectTraceEvidence} /> : null}
               {activeView === "evidence" ? <EvidenceView key={`${result.signature}:evidence`} stateKey={`${result.signature}:evidence`} result={result} help={help} onSelect={selectItem} onHelp={setContextHelp} /> : null}
               {activeView === "files" ? <FilesView key={`${result.signature}:files`} stateKey={`${result.signature}:files`} result={result} onSelect={selectItem} /> : null}
             </>
@@ -760,7 +855,7 @@ function ExplorerApp() {
         </div>
       </main>
 
-      {detailOpen ? <DetailPanel selected={selected} result={result} onClose={() => setDetailOpen(false)} onSelect={selectItem} /> : null}
+      {detailOpen ? <DetailPanel selected={selected} result={result} onClose={() => setDetailOpen(false)} onSelect={selectItem} onTrace={openTrace} /> : null}
 
       <Dialog open={searchOpen} onOpenChange={setSearchOpen} title={t("search.title")} description={t("search.desc")}>
         <div className="search-field"><Search size={17} /><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder={t("search.placeholder")} aria-label={t("search.title")} /></div>
@@ -902,7 +997,7 @@ function DataTable<T>({ rows, columns, rowKey, onRowClick, empty, stateKey }: { 
         const nextDirection = active && sort.direction === "asc" ? "desc" : "asc";
         return <th key={column.key} aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}>{column.sortable === false ? column.label : <button className="sort-button" aria-label={t("table.sort", { column: column.label })} onClick={() => { setSort({ key: column.key, direction: nextDirection }); setPage(0); }}>{column.label}{!active ? <ArrowUpDown size={13} /> : sort.direction === "asc" ? <ArrowUp size={13} /> : <ArrowDown size={13} />}</button>}</th>;
       })}</tr></thead><tbody>{visible.map((row) => <tr key={rowKey(row)} tabIndex={0} onClick={() => onRowClick(row)} onKeyDown={(event) => activateRow(event, () => onRowClick(row))}>{columns.map((column) => <td key={column.key} className={column.className}>{column.render ? column.render(row) : column.value(row)}</td>)}</tr>)}</tbody></table></div></Card>
-      <div className="table-footer"><label>{t("table.pageSize")}<select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(0); }}>{[25, 50, 100].map((size) => <option key={size} value={size}>{size}</option>)}</select></label><span>{t("table.range", { start, end, total: sorted.length.toLocaleString(localeCode(locale)) })}</span><div><Button variant="secondary" disabled={safePage === 0} onClick={() => setPage(safePage - 1)}>{t("common.previous")}</Button><span>{safePage + 1} / {pages}</span><Button variant="secondary" disabled={safePage >= pages - 1} onClick={() => setPage(safePage + 1)}>{t("common.next")}</Button></div></div>
+      <div className="table-footer"><label>{t("table.pageSize")}<select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(0); }}>{[25, 50, 100].map((size) => <option key={size} value={size}>{size}</option>)}</select></label><span>{t("table.range", { start, end, total: sorted.length.toLocaleString(localeCode(locale)) })}</span><PageNavigator page={safePage} pages={pages} onChange={setPage} /></div>
     </>
   );
 }
@@ -941,8 +1036,8 @@ function SubscriptionsView({ result, help, onSelect, onHelp, stateKey }: { resul
   return <div className="view-stack"><FilterBar value={filter} onChange={setFilter} placeholder={t("filter.subscription")} count={rows.length} onHelp={() => onHelp(help.subscription)} /><DataTable stateKey={stateKey} rows={rows} columns={columns} rowKey={(item) => item.id} onRowClick={(item) => onSelect({ type: "subscription", value: item })} empty={t("empty.subscription")} /></div>;
 }
 
-function MessagesView({ result, onSelect, stateKey }: { result: ScanResult; onSelect: (item: Selected) => void; stateKey: string }) {
-  const { t } = useI18n();
+function MessagesView({ result, onSelect, stateKey, onLoadMore, loading, loadError, sourceAvailable, progress }: { result: ScanResult; onSelect: (item: Selected) => void; stateKey: string; onLoadMore: () => void; loading: boolean; loadError: string; sourceAvailable: boolean; progress?: WorkerProgress }) {
+  const { t, locale } = useI18n();
   const [filter, setFilter] = usePersistentState(`${stateKey}:filter`, "");
   const rows = result.messages.filter((item) => `${item.journal} ${item.destination} ${item.detectedType} ${item.relatedId}`.toLowerCase().includes(filter.toLowerCase()));
   const columns: TableColumn<MessageCandidate>[] = [
@@ -953,11 +1048,19 @@ function MessagesView({ result, onSelect, stateKey }: { result: ScanResult; onSe
     { key: "operation", label: t("table.operation"), value: (item) => displayOperation(item.operation, t), render: (item) => <Badge tone={item.operation === "Unknown" ? "neutral" : "blue"}>{displayOperation(item.operation, t)}</Badge> },
     { key: "relatedId", label: t("table.relatedId"), value: (item) => item.relatedId, className: "mono-cell", render: (item) => <span title={item.relatedId}>{compactId(item.relatedId, 20, 9)}</span> },
   ];
-  return <div className="view-stack"><FilterBar value={filter} onChange={setFilter} placeholder={t("filter.message")} count={rows.length} /><DataTable stateKey={stateKey} rows={rows} columns={columns} rowKey={(item) => item.id} onRowClick={(item) => onSelect({ type: "message", value: item })} empty={t("empty.message")} /></div>;
+  const progressPercent = progress?.totalBytes ? Math.round((progress.scannedBytes / progress.totalBytes) * 100) : 0;
+  return <div className="view-stack"><FilterBar value={filter} onChange={setFilter} placeholder={t("filter.message")} count={rows.length} />{result.truncated.messages ? <Card className="message-load-more"><div><strong>{t("messages.loaded", { count: result.messages.length.toLocaleString(localeCode(locale)) })}</strong><p>{sourceAvailable ? t("messages.moreAvailable") : t("messages.reopenRequired")}</p>{loading ? <div className="progress-track"><span style={{ width: `${progressPercent}%` }} /></div> : null}{loadError ? <small>{loadError}</small> : null}</div><Button variant="secondary" disabled={loading || !sourceAvailable} onClick={onLoadMore}>{loading ? <LoaderCircle className="spin" size={14} /> : <Plus size={14} />}{loading ? t("messages.loading", { percent: progressPercent }) : t("messages.loadMore", { count: MESSAGE_BATCH_SIZE.toLocaleString(localeCode(locale)) })}</Button></Card> : <div className="best-effort"><Check size={15} /><span>{t("messages.allLoaded", { count: result.messages.length.toLocaleString(localeCode(locale)) })}</span></div>}<DataTable stateKey={stateKey} rows={rows} columns={columns} rowKey={(item) => item.id} onRowClick={(item) => onSelect({ type: "message", value: item })} empty={t("empty.message")} /></div>;
 }
 
 function evidenceKind(kind: EvidenceLink["kind"], t: Translator) {
   return t(`evidence.kind.${kind}`);
+}
+
+function evidenceRelationship(item: EvidenceLink, t: Translator) {
+  if (item.kind === "message") return item.ackStatus === "Observed" ? t("evidence.relationship.messageAck") : t("evidence.relationship.messageRecord");
+  if (item.kind === "transaction") return t("evidence.relationship.transaction");
+  if (item.kind === "subscription") return t("evidence.relationship.subscription");
+  return t("evidence.relationship.advisory");
 }
 
 function EvidenceView({ result, help, onSelect, onHelp, stateKey }: { result: ScanResult; help: Record<string, ContextHelp>; onSelect: (item: Selected) => void; onHelp: (help: ContextHelp) => void; stateKey: string }) {
@@ -968,13 +1071,14 @@ function EvidenceView({ result, help, onSelect, onHelp, stateKey }: { result: Sc
   );
   const columns: TableColumn<EvidenceLink>[] = [
     { key: "kind", label: t("table.entity"), value: (item) => evidenceKind(item.kind, t), render: (item) => <Badge tone={item.kind === "advisory" ? "violet" : item.kind === "transaction" ? "amber" : "blue"}>{evidenceKind(item.kind, t)}</Badge> },
+    { key: "relationship", label: t("evidence.relationship"), value: (item) => evidenceRelationship(item, t), render: (item) => <span className="evidence-relationship-cell"><span>{evidenceKind(item.kind, t)}</span><ChevronRight size={13} /><strong>{evidenceRelationship(item, t)}</strong></span> },
     { key: "id", label: t("table.relatedId"), value: (item) => item.primaryId, className: "mono-cell", render: (item) => <span title={item.primaryId}>{compactId(item.primaryId, 24, 10)}</span> },
     { key: "destination", label: t("table.destination"), value: (item) => item.destination, className: "mono-cell" },
     { key: "journal", label: t("table.journal"), value: (item) => item.journal, render: (item) => <span title={item.journal}>{compactId(item.journal, 28, 12)}</span> },
     { key: "offset", label: t("table.offset"), value: (item) => item.offset ?? -1, className: "mono-cell", render: (item) => item.offset === null ? t("type.unknown") : formatOffset(item.offset) },
     { key: "evidence", label: t("table.evidence"), value: (item) => t(`confidence.${item.confidence}`), render: (item) => <ConfidenceBadge confidence={item.confidence} /> },
   ];
-  return <div className="view-stack"><FilterBar value={filter} onChange={setFilter} placeholder={t("filter.evidence")} count={rows.length} onHelp={() => onHelp(help.correlation)} /><div className="best-effort"><Info size={15} /><span>{t("evidence.limit")}</span></div><DataTable stateKey={stateKey} rows={rows} columns={columns} rowKey={(item) => item.id} onRowClick={(item) => onSelect({ type: "correlation", value: item })} empty={t("empty.evidence")} /></div>;
+  return <div className="view-stack"><FilterBar value={filter} onChange={setFilter} placeholder={t("filter.evidence")} count={rows.length} onHelp={() => onHelp(help.correlation)} /><Card className="evidence-map"><div><span>{t("evidence.map.source")}</span><strong>{t("evidence.map.record")}</strong></div><ChevronRight size={18} /><div><span>{t("evidence.map.key")}</span><strong>{t("evidence.map.identity")}</strong></div><ChevronRight size={18} /><div><span>{t("evidence.map.result")}</span><strong>{t("evidence.map.related")}</strong></div></Card><div className="best-effort"><Info size={15} /><span>{t("evidence.limit")}</span></div><DataTable stateKey={stateKey} rows={rows} columns={columns} rowKey={(item) => item.id} onRowClick={(item) => onSelect({ type: "correlation", value: item })} empty={t("empty.evidence")} /></div>;
 }
 
 function FilesView({ result, onSelect, stateKey }: { result: ScanResult; onSelect: (item: Selected) => void; stateKey: string }) {
@@ -991,9 +1095,9 @@ function FilesView({ result, onSelect, stateKey }: { result: ScanResult; onSelec
   return <div className="view-stack"><FilterBar value={filter} onChange={setFilter} placeholder={t("filter.file")} count={rows.length} /><DataTable stateKey={stateKey} rows={rows} columns={columns} rowKey={(item) => item.path} onRowClick={(item) => onSelect({ type: "file", value: item })} empty={t("empty.fileFilter")} /></div>;
 }
 
-function DetailPanel({ selected, result, onClose, onSelect }: { selected: Selected; result: ScanResult | null; onClose: () => void; onSelect: (item: Selected) => void }) {
+function DetailPanel({ selected, result, onClose, onSelect, onTrace }: { selected: Selected; result: ScanResult | null; onClose: () => void; onSelect: (item: Selected) => void; onTrace: (messageId: string) => void }) {
   const { t } = useI18n();
-  return <aside className="detail-panel"><div className="detail-head"><div><span>{t("detail.panel")}</span><strong>{selected ? detailTitle(selected) : t("detail.selected")}</strong></div><button onClick={onClose} aria-label={t("header.detailClose")}><X size={17} /></button></div><ScrollArea className="detail-scroll">{!selected ? <div className="detail-empty"><PanelRightOpen size={27} /><h3>{t("detail.emptyTitle")}</h3><p>{t("detail.emptyBody")}</p></div> : null}{selected?.type === "destination" ? <DestinationDetail value={selected.value} result={result} onSelect={onSelect} /> : null}{selected?.type === "subscription" ? <SubscriptionDetail value={selected.value} result={result} onSelect={onSelect} /> : null}{selected?.type === "message" ? <MessageDetail value={selected.value} /> : null}{selected?.type === "correlation" ? <CorrelationDetail value={selected.value} result={result} onSelect={onSelect} /> : null}{selected?.type === "record" ? <StructuredRecordDetail value={selected.value} result={result} onSelect={onSelect} /> : null}{selected?.type === "raw" ? <RawEvidenceDetail value={selected.value} /> : null}{selected?.type === "file" ? <FileDetail value={selected.value} result={result} onSelect={onSelect} /> : null}</ScrollArea></aside>;
+  return <aside className="detail-panel"><div className="detail-head"><div><span>{t("detail.panel")}</span><strong>{selected ? detailTitle(selected) : t("detail.selected")}</strong></div><button onClick={onClose} aria-label={t("header.detailClose")}><X size={17} /></button></div><ScrollArea className="detail-scroll">{!selected ? <div className="detail-empty"><PanelRightOpen size={27} /><h3>{t("detail.emptyTitle")}</h3><p>{t("detail.emptyBody")}</p></div> : null}{selected?.type === "destination" ? <DestinationDetail value={selected.value} result={result} onSelect={onSelect} /> : null}{selected?.type === "subscription" ? <SubscriptionDetail value={selected.value} result={result} onSelect={onSelect} /> : null}{selected?.type === "message" ? <><Button className="trace-detail-action" disabled={selected.value.relatedId === "Unknown"} onClick={() => onTrace(selected.value.relatedId)}><Search size={14} />{t("trace.thisMessage")}</Button><MessageDetail value={selected.value} /></> : null}{selected?.type === "correlation" ? <CorrelationDetail value={selected.value} result={result} onSelect={onSelect} /> : null}{selected?.type === "record" ? <StructuredRecordDetail value={selected.value} result={result} onSelect={onSelect} /> : null}{selected?.type === "raw" ? <RawEvidenceDetail value={selected.value} /> : null}{selected?.type === "file" ? <FileDetail value={selected.value} result={result} onSelect={onSelect} /> : null}</ScrollArea></aside>;
 }
 
 function detailTitle(selected: NonNullable<Selected>) {
